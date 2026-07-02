@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>App — Transcribe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#14110f;--surface:#1d1916;--surface-2:#262019;--line:#36302a;--ink:#f3ede4;--muted:#a89e90;--faint:#6f655a;--accent:#ff6a4d;--accent-soft:#ff6a4d22;--ok:#7bd88f;--radius:16px}
+body{background:var(--bg);color:var(--ink);font-family:"Inter",sans-serif;line-height:1.6;min-height:100vh;background-image:radial-gradient(900px 500px at 80% -10%,#ff6a4d14,transparent 70%)}
+nav{display:flex;justify-content:space-between;align-items:center;padding:16px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:100}
+.logo{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:20px;text-decoration:none;color:var(--ink)}
+.logo span{color:var(--accent)}
+.nav-right{display:flex;gap:10px;align-items:center}
+.user-email{font-size:13px;color:var(--faint);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-sm{background:transparent;color:var(--muted);border:1px solid var(--line);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:"Inter";text-decoration:none;transition:all .15s}
+.btn-sm:hover{border-color:var(--accent);color:var(--ink)}
+.wrap{max-width:780px;margin:0 auto;padding:clamp(20px,4vw,48px)}
+.eyebrow{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+h1{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.02em;line-height:1.02;font-size:clamp(30px,7vw,52px)}
+h1 .em{color:var(--accent)}
+.sub{color:var(--muted);margin-top:10px;font-size:clamp(14px,3vw,16px);max-width:46ch}
+.tabs{display:flex;gap:8px;margin-top:24px}
+.tab{padding:10px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-family:"Inter"}
+.tab.active{background:var(--accent);color:#1a0d08;border-color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:clamp(16px,3vw,24px);margin-top:12px}
+.field{display:flex;flex-direction:column;gap:10px}
+label{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.input-row{display:flex;gap:10px;flex-wrap:wrap}
+input[type="text"]{flex:1 1 240px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-size:16px;padding:14px 16px;border-radius:12px;font-family:"Inter";min-width:0}
+input[type="text"]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+input[type="text"]::placeholder{color:var(--faint)}
+button.primary{background:var(--accent);color:#1a0d08;border:none;font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:16px;padding:14px 22px;border-radius:12px;cursor:pointer;flex:0 0 auto;white-space:nowrap}
+button.primary:disabled{opacity:.55;cursor:not-allowed}
+.opts{display:flex;gap:18px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.toggle{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:14px;color:var(--muted)}
+.toggle input{accent-color:var(--accent);width:16px;height:16px}
+.lang select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-family:"Inter";font-size:14px;cursor:pointer}
+.msg{margin-top:14px;font-size:14px;border-radius:12px;padding:12px 16px;display:none}
+.msg.err{display:block;background:#ff6a4d10;border:1px solid #ff6a4d44;color:#ffb9a8}
+.loading{display:none;margin-top:22px;align-items:center;gap:12px;color:var(--muted);font-size:14px}
+.loading.on{display:flex}
+.spinner{width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.result{display:none;margin-top:clamp(24px,4vw,36px)}
+.result.on{display:block}
+.result-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.meta{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--faint)}
+.meta b{color:var(--ok)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.ghost{background:var(--surface-2);color:var(--ink);border:1px solid var(--line);font-size:13px;font-weight:600;padding:9px 14px;border-radius:10px;font-family:"Inter";cursor:pointer}
+.ghost:hover{border-color:var(--accent)}
+.transcript{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:clamp(16px,3vw,24px);max-height:60vh;overflow-y:auto;font-size:15.5px;line-height:1.85}
+.transcript.plain{white-space:pre-wrap;word-break:break-word}
+.line{display:flex;gap:14px;padding:5px 0;border-bottom:1px solid #36302a30}
+.line:last-child{border-bottom:none}
+.line .t{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--accent);flex:0 0 auto;padding-top:4px;min-width:56px}
+.clips-wrap{margin-top:32px;display:none}
+.clips-wrap.on{display:block}
+.clips-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px}
+.clip-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:14px}
+.clip-card:hover{border-color:var(--accent)}
+.clip-num{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.clip-title{font-family:"Bricolage Grotesque",sans-serif;font-size:clamp(16px,4vw,20px);font-weight:700;margin-bottom:8px}
+.clip-hook{color:var(--muted);font-size:14px;font-style:italic;margin-bottom:12px}
+.clip-time{background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);border-radius:8px;padding:4px 12px;font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:600;display:inline-block;margin-bottom:10px}
+.clip-why{color:var(--muted);font-size:13px;margin-bottom:10px}
+.clip-tags{display:flex;gap:6px;flex-wrap:wrap}
+.clip-tag{background:var(--surface-2);border:1px solid var(--line);color:var(--faint);border-radius:6px;padding:3px 10px;font-size:12px;font-family:"JetBrains Mono",monospace}
+.tiktok-note{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--muted);margin-top:12px;display:none}
+.tiktok-note.on{display:block}
+.download-section{margin-top:32px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px}
+.download-title{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:20px;margin-bottom:8px}
+.download-sub{color:var(--muted);font-size:14px;margin-bottom:16px}
+.quality-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.q-btn{background:var(--surface-2);color:var(--ink);border:1px solid var(--line);padding:10px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:"Inter"}
+.q-btn:hover{border-color:var(--accent)}
+footer{margin-top:40px;color:var(--faint);font-size:13px;text-align:center;padding-bottom:40px}
+@media(max-width:480px){.input-row button.primary{flex:1 1 100%}.actions{width:100%}.ghost{flex:1;text-align:center}}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo">Trans<span>cribe</span></a>
+  <div class="nav-right">
+    <span class="user-email" id="user-email"></span>
+    <a href="/download.html" class="btn-sm">⬇️ HD Download</a>
+    <button class="btn-sm" id="logout-btn" onclick="handleLogout()" style="display:none">Logout</button>
+    <a href="/login.html" class="btn-sm" id="login-link">Login</a>
+  </div>
+</nav>
+<div class="wrap">
+  <div class="eyebrow">Speech to Text</div>
+  <h1>Turn any video into <span class="em">text.</span></h1>
+  <p class="sub">Paste a YouTube or TikTok link — get the full transcript instantly.</p>
+
+  <div class="tabs">
+    <button class="tab active" id="tab-yt" onclick="switchTab('yt')">▶ YouTube</button>
+    <button class="tab" id="tab-tt" onclick="switchTab('tt')">♪ TikTok</button>
+  </div>
+
+  <div class="card">
+    <div class="field">
+      <label for="url" id="url-label">YouTube video link or ID</label>
+      <div class="input-row">
+        <input id="url" type="text" inputmode="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=..."/>
+        <button class="primary" id="go">Get Transcript</button>
+      </div>
+    </div>
+    <div class="opts" id="yt-opts">
+      <label class="toggle" for="ts"><input type="checkbox" id="ts" checked/> Show timestamps</label>
+      <div class="lang"><span style="color:var(--muted);font-size:14px">Language</span>
+        <select id="lang">
+          <option value="">Auto</option><option value="en">English</option><option value="ur">Urdu</option>
+          <option value="hi">Hindi</option><option value="ar">Arabic</option><option value="es">Spanish</option>
+          <option value="fr">French</option><option value="de">German</option><option value="ru">Russian</option>
+          <option value="ja">Japanese</option><option value="ko">Korean</option><option value="tr">Turkish</option>
+        </select>
+      </div>
+    </div>
+    <div class="tiktok-note" id="tt-note">TikTok captions extracted from auto-generated subtitles.</div>
+    <div class="msg" id="err"></div>
+    <div class="loading" id="loading"><div class="spinner"></div><span id="load-text">Fetching transcript...</span></div>
+  </div>
+
+  <section class="result" id="result">
+    <div class="result-head">
+      <div class="meta" id="meta"></div>
+      <div class="actions">
+        <button class="ghost" id="copy">Copy</button>
+        <button class="ghost" id="dl">Download .txt</button>
+      </div>
+    </div>
+    <div class="transcript" id="out"></div>
+  </section>
+
+  <div class="clips-wrap" id="clips-wrap">
+    <div class="clips-head">
+      <div><div class="eyebrow">AI Powered</div><h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(20px,4vw,28px);font-weight:800;letter-spacing:-.02em">Best Clips Finder</h2></div>
+      <button class="primary" id="clips-btn" style="padding:12px 20px;font-size:15px">Find Best Clips</button>
+    </div>
+    <div class="loading" id="clips-loading"><div class="spinner"></div> AI analyzing transcript...</div>
+    <div class="msg" id="clips-err"></div>
+    <div id="clips-out"></div>
+  </div>
+
+  <footer>© 2026 Transcribe · <a href="/" style="color:var(--faint)">Home</a></footer>
+</div>
+
+<script>
+const SUPA_URL = "https://fosonevnuvcmrmqgsceh.supabase.co";
+const SUPA_KEY = "sb_publishable_0Fqyk60LGARz_lUjlYX78w_3gcwYcIr";
+const supa = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
+var urlEl=document.getElementById("url"),goEl=document.getElementById("go"),tsEl=document.getElementById("ts"),langEl=document.getElementById("lang");
+var errEl=document.getElementById("err"),loadEl=document.getElementById("loading"),resEl=document.getElementById("result");
+var outEl=document.getElementById("out"),metaEl=document.getElementById("meta"),copyEl=document.getElementById("copy"),dlEl=document.getElementById("dl");
+var clipsWrap=document.getElementById("clips-wrap"),clipsBtn=document.getElementById("clips-btn"),clipsLoad=document.getElementById("clips-loading"),clipsErr=document.getElementById("clips-err"),clipsOut=document.getElementById("clips-out");
+var current={segments:[],plain:"",videoId:""},currentData=null,currentTab="yt";
+
+// Auth check
+supa.auth.getSession().then(function(d){
+  var s=d.data.session;
+  if(s){
+    document.getElementById("user-email").textContent=s.user.email;
+    document.getElementById("logout-btn").style.display="block";
+    document.getElementById("login-link").style.display="none";
+  }
+});
+
+async function handleLogout(){
+  await supa.auth.signOut();
+  window.location.href="/login.html";
+}
+
+function switchTab(t){
+  currentTab=t;
+  document.getElementById("tab-yt").classList.toggle("active",t==="yt");
+  document.getElementById("tab-tt").classList.toggle("active",t==="tt");
+  document.getElementById("yt-opts").style.display=t==="yt"?"flex":"none";
+  document.getElementById("tt-note").classList.toggle("on",t==="tt");
+  document.getElementById("url-label").textContent=t==="yt"?"YouTube video link or ID":"TikTok video link";
+  urlEl.placeholder=t==="yt"?"https://www.youtube.com/watch?v=...":"https://www.tiktok.com/@user/video/...";
+  errEl.className="msg";resEl.classList.remove("on");clipsWrap.classList.remove("on");
+  urlEl.value="";urlEl.focus();
+}
+function showErr(m){errEl.textContent=m;errEl.className="msg err";}
+function esc(s){return s.replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function render(){
+  if(tsEl.checked&&current.segments.length){
+    outEl.classList.remove("plain");
+    outEl.innerHTML=current.segments.map(function(s){return'<div class="line"><span class="t">'+s.time+'</span><span>'+esc(s.text)+'</span></div>';}).join("");
+  }else{outEl.classList.add("plain");outEl.textContent=current.plain;}
+}
+async function fetchTranscript(){
+  var url=urlEl.value.trim();
+  if(!url){showErr("Please paste a link.");return;}
+  errEl.className="msg";resEl.classList.remove("on");clipsWrap.classList.remove("on");
+  loadEl.classList.add("on");
+  document.getElementById("load-text").textContent=currentTab==="tt"?"Extracting TikTok captions...":"Fetching transcript...";
+  goEl.disabled=true;goEl.textContent="Loading...";
+  try{
+    var ep=currentTab==="tt"?"/api/tiktok":"/api/transcript";
+    var body=currentTab==="tt"?{url:url}:{url:url,lang:langEl.value||undefined};
+    var r=await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    var data=await r.json();
+    if(!r.ok)throw new Error(data.error||"Something went wrong.");
+    current=data;currentData=data;
+    var words=data.plain.trim().split(/\s+/).filter(Boolean).length;
+    var dur=data.segments&&data.segments.length>0?Math.round(data.segments[data.segments.length-1].offset/60)+" min":"";
+    metaEl.innerHTML=(currentTab==="tt"?"TikTok":"YouTube")+" · <b>"+(data.videoId||"")+"</b> · "+data.count+" lines · ~"+words.toLocaleString()+" words"+(dur?" · "+dur:"");
+    render();resEl.classList.add("on");clipsWrap.classList.add("on");
+  }catch(e){showErr(e.message);}
+  finally{loadEl.classList.remove("on");goEl.disabled=false;goEl.textContent="Get Transcript";}
+}
+function getText(){
+  if(tsEl.checked&&current.segments&&current.segments.length)return current.segments.map(function(s){return"["+s.time+"] "+s.text;}).join("\n");
+  return current.plain;
+}
+goEl.addEventListener("click",fetchTranscript);
+urlEl.addEventListener("keydown",function(e){if(e.key==="Enter")fetchTranscript();});
+tsEl.addEventListener("change",function(){if(current.segments.length)render();});
+copyEl.addEventListener("click",async function(){
+  try{await navigator.clipboard.writeText(getText());copyEl.textContent="Copied!";setTimeout(function(){copyEl.textContent="Copy";},1800);}catch(e){showErr("Copy failed.");}
+});
+dlEl.addEventListener("click",function(){
+  var b=new Blob([getText()],{type:"text/plain;charset=utf-8"});
+  var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="transcript_"+(current.videoId||"video")+".txt";a.click();URL.revokeObjectURL(a.href);
+});
+clipsBtn.addEventListener("click",async function(){
+  if(!currentData){alert("Get a transcript first!");return;}
+  clipsBtn.disabled=true;clipsBtn.textContent="Analyzing...";
+  clipsLoad.classList.add("on");clipsErr.className="msg";clipsOut.innerHTML="";
+  try{
+    var last=currentData.segments&&currentData.segments.length>0?currentData.segments[currentData.segments.length-1].offset:0;
+    var r=await fetch("/api/find-clips",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({segments:currentData.segments,plain:currentData.plain,duration:last})});
+    var data=await r.json();
+    if(!r.ok)throw new Error(data.error||"Could not find clips.");
+    if(!data.clips||data.clips.length===0)throw new Error("No clips found.");
+    clipsOut.innerHTML=data.clips.map(function(clip){
+      var tags=(clip.tags||[]).map(function(t){return'<span class="clip-tag">#'+t+'</span>';}).join("");
+      return'<div class="clip-card"><div class="clip-num">Clip '+clip.clip_number+'</div><div class="clip-title">'+esc(clip.title||"")+'</div><div class="clip-hook">"'+esc(clip.hook||"")+'"</div><div class="clip-time">▶ '+(clip.start_time||"00:00")+' → '+(clip.end_time||"00:42")+'</div><div class="clip-why">💡 '+esc(clip.why_viral||"")+'</div><div class="clip-tags">'+tags+'</div></div>';
+    }).join("");
+  }catch(e){clipsErr.textContent=e.message;clipsErr.className="msg err";}
+  finally{clipsLoad.classList.remove("on");clipsBtn.disabled=false;clipsBtn.textContent="Find Best Clips";}
+});
+urlEl.addEventListener("focus",async function(){
+  if(urlEl.value)return;
+  try{var t=await navigator.clipboard.readText();if(t.includes("youtube.com")||t.includes("youtu.be")||t.includes("tiktok.com"))urlEl.value=t;}catch(_){}
+});
+</script>
+</body>
+</html>
