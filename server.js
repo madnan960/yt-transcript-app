@@ -277,22 +277,25 @@ app.post("/api/video-info", async function(req, res) {
       var data = JSON.parse(apiRes.body);
 
       if (data && Array.isArray(data.medias) && data.medias.length > 0) {
-        // Prefer progressive formats (video + audio combined) so downloads have sound
-        var all = data.medias;
-        var progressive = all.filter(function(m) { return !m.requiresMerge; });
-        var list = progressive.length > 0 ? progressive : all;
-
-        var formats = list.map(function(m) {
-          var q = m.quality || m.label || "Video";
-          var isAudio = /kbps/i.test(String(q));
-          var extStr = (m.extension || "mp4") + (m.formattedSize ? " \u00b7 " + m.formattedSize : "");
-          return {
-            quality: isAudio ? "Audio (" + q + ")" : q,
-            ext: extStr,
-            url: m.url,
-            size: m.formattedSize || ""
-          };
+        // Group: progressive video (with sound) first, then video-only, then audio
+        var vidsProg = [], vidsOnly = [], audios = [];
+        data.medias.forEach(function(m) {
+          var q = String(m.quality || m.label || "");
+          if (/kbps/i.test(q) || (!m.videoAvailable && m.audioAvailable)) audios.push(m);
+          else if (m.requiresMerge) vidsOnly.push(m);
+          else vidsProg.push(m);
         });
+
+        function mkFormat(m, suffix) {
+          var q = m.quality || m.label || "Video";
+          var extStr = (m.extension || "mp4") + (m.formattedSize ? " \u00b7 " + m.formattedSize : "");
+          return { quality: q + (suffix || ""), ext: extStr, url: m.url, size: m.formattedSize || "" };
+        }
+
+        var formats = []
+          .concat(vidsProg.map(function(m) { return mkFormat(m, ""); }))
+          .concat(vidsOnly.map(function(m) { return mkFormat(m, " (no audio)"); }))
+          .concat(audios.map(function(m) { return mkFormat({ quality: "Audio (" + (m.quality || "") + ")", extension: m.extension, formattedSize: m.formattedSize, url: m.url }, ""); }));
 
         return res.json({
           title: data.title || "YouTube Video",
