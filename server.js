@@ -207,19 +207,34 @@ app.post("/api/tiktok", async function(req, res) {
       return res.status(404).json({ error: "No transcript found for this TikTok video." });
     }
 
-    // Parse timestamps if available
+    // Parse timestamps - group words into sentence chunks
     const segments = [];
-    if (data.words && Array.isArray(data.words)) {
-      data.words.forEach(function(w) {
-        if (w.text && w.start !== undefined) {
-          segments.push({ text: w.text, offset: w.start, time: formatTime(w.start) });
+    if (data.words && Array.isArray(data.words) && data.words.length > 0) {
+      // Group every ~10 words into a segment
+      const chunkSize = 10;
+      let i = 0;
+      while (i < data.words.length) {
+        const chunk = data.words.slice(i, i + chunkSize);
+        const text = chunk.map(function(w) { return w.text || w.word || ""; }).join(" ").trim();
+        const offset = chunk[0].start !== undefined ? chunk[0].start : (chunk[0].startTime || 0);
+        if (text) {
+          segments.push({ text: text, offset: offset, time: formatTime(offset) });
         }
-      });
+        i += chunkSize;
+      }
     }
 
     if (segments.length === 0) {
-      // Return as plain text if no word-level timestamps
-      segments.push({ text: data.text, offset: 0, time: "00:00" });
+      // Split plain text into chunks of ~100 chars
+      const words = data.text.split(" ");
+      const chunkSize = 15;
+      for (let i = 0; i < words.length; i += chunkSize) {
+        const chunk = words.slice(i, i + chunkSize).join(" ");
+        segments.push({ text: chunk, offset: 0, time: "00:00" });
+      }
+      if (segments.length === 0) {
+        segments.push({ text: data.text, offset: 0, time: "00:00" });
+      }
     }
 
     const plain = data.text;
@@ -239,5 +254,6 @@ app.post("/api/tiktok", async function(req, res) {
 app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
 app.get("/", function(req, res) { res.sendFile(path.join(__dirname, "public", "index.html")); });
 app.listen(PORT, function() { console.log("Server running on port " + PORT); });
+
 
 
