@@ -49,6 +49,17 @@ function httpsGet(options) {
   });
 }
 
+function decodeEntities(str) {
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&apos;/g, "'");
+}
+
 function parseVTT(vtt) {
   const segments = [];
   const lines = vtt.split("\n");
@@ -63,7 +74,7 @@ function parseVTT(vtt) {
       i++;
       let text = "";
       while (i < lines.length && lines[i].trim() !== "") {
-        const t = lines[i].trim().replace(/<[^>]+>/g, "").trim();
+        const t = decodeEntities(lines[i].trim().replace(/<[^>]+>/g, "").trim());
         if (t) text += (text ? " " : "") + t;
         i++;
       }
@@ -169,3 +180,4 @@ app.post("/api/tiktok", async function(req, res) {
 app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
 app.get("/", function(req, res) { res.sendFile(path.join(__dirname, "public", "index.html")); });
 app.listen(PORT, function() { console.log("Server running on port " + PORT); });
+
