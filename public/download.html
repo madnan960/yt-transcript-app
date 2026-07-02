@@ -3,171 +3,180 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>HD Download — Transcribe</title>
+<title>HD Download - Transcribe</title>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#14110f;--surface:#1d1916;--surface-2:#262019;--line:#36302a;--ink:#f3ede4;--muted:#a89e90;--faint:#6f655a;--accent:#ff6a4d;--accent-soft:#ff6a4d22;--ok:#7bd88f;--radius:16px}
-body{background:var(--bg);color:var(--ink);font-family:"Inter",sans-serif;line-height:1.6;min-height:100vh;background-image:radial-gradient(900px 500px at 50% -10%,#ff6a4d14,transparent 70%)}
-nav{display:flex;justify-content:space-between;align-items:center;padding:16px clamp(16px,4vw,40px);border-bottom:1px solid var(--line)}
+:root{--bg:#14110f;--surface:#1d1916;--surface-2:#262019;--line:#36302a;--ink:#f3ede4;--muted:#a89e90;--faint:#6f655a;--accent:#ff6a4d;--accent-soft:#ff6a4d22;--radius:16px}
+body{background:var(--bg);color:var(--ink);font-family:Inter,sans-serif;min-height:100vh;background-image:radial-gradient(900px 500px at 50% -10%,#ff6a4d14,transparent 70%)}
+nav{display:flex;justify-content:space-between;align-items:center;padding:16px 40px;border-bottom:1px solid var(--line)}
 .logo{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:20px;text-decoration:none;color:var(--ink)}
 .logo span{color:var(--accent)}
-.nav-links{display:flex;gap:8px}
-.btn-sm{background:transparent;color:var(--muted);border:1px solid var(--line);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:"Inter";text-decoration:none;transition:all .15s}
-.btn-sm:hover{border-color:var(--accent);color:var(--ink)}
-.wrap{max-width:680px;margin:0 auto;padding:clamp(32px,6vw,64px) clamp(20px,4vw,48px)}
-.eyebrow{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
-h1{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.02em;font-size:clamp(30px,7vw,52px);margin-bottom:12px}
-h1 .em{color:var(--accent)}
+.nav-r{display:flex;gap:8px}
+.nsm{background:transparent;color:var(--muted);border:1px solid var(--line);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;font-family:Inter}
+.nsm:hover{border-color:var(--accent);color:var(--ink)}
+.wrap{max-width:680px;margin:0 auto;padding:48px 24px}
+.ey{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+h1{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:48px;letter-spacing:-.02em;margin-bottom:12px}
+h1 em{color:var(--accent);font-style:normal}
 .sub{color:var(--muted);font-size:16px;margin-bottom:32px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:clamp(20px,3vw,32px)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:28px}
 .ptabs{display:flex;gap:8px;margin-bottom:20px}
-.ptab{padding:9px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-family:"Inter";transition:all .15s}
-.ptab.active{background:var(--accent);color:#1a0d08;border-color:var(--accent)}
-.field{display:flex;flex-direction:column;gap:10px;margin-bottom:0}
-label{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
-.input-row{display:flex;gap:10px;flex-wrap:wrap}
-input[type="text"]{flex:1 1 240px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-size:16px;padding:14px 16px;border-radius:12px;font-family:"Inter";min-width:0;transition:border-color .15s}
-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.ptab{padding:9px 18px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-family:Inter;cursor:pointer}
+.ptab.on{background:var(--accent);color:#1a0d08;border-color:var(--accent)}
+lbl{display:block;font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+.row{display:flex;gap:10px}
+input{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-size:16px;padding:14px 16px;border-radius:12px;font-family:Inter}
+input:focus{outline:none;border-color:var(--accent)}
 input::placeholder{color:var(--faint)}
-.btn-get{background:var(--accent);color:#1a0d08;border:none;font-family:"Bricolage Grotesque";font-weight:700;font-size:16px;padding:14px 22px;border-radius:12px;cursor:pointer;white-space:nowrap;transition:filter .15s}
-.btn-get:hover{filter:brightness(1.08)}
-.btn-get:disabled{opacity:.55;cursor:not-allowed}
-.msg{margin-top:14px;font-size:14px;border-radius:12px;padding:12px 16px;display:none}
-.msg.err{display:block;background:#ff6a4d10;border:1px solid #ff6a4d44;color:#ffb9a8}
-.spinner-wrap{display:none;align-items:center;gap:12px;color:var(--muted);font-size:14px;margin-top:16px}
-.spinner-wrap.on{display:flex}
-.spinner{width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
-@keyframes spin{to{transform:rotate(360deg)}}
-.result{display:none;margin-top:24px}
-.result.on{display:block}
-.video-info{display:flex;gap:16px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:20px;flex-wrap:wrap}
-.thumb{width:120px;height:68px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--line)}
-.video-title{font-weight:600;font-size:15px;margin-bottom:6px;line-height:1.4}
-.video-meta{font-size:13px;color:var(--muted)}
-.q-section h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:18px;margin-bottom:14px}
-.q-list{display:flex;flex-direction:column;gap:10px}
-.q-item{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;flex-wrap:wrap;gap:10px}
-.q-item:hover{border-color:var(--accent)}
-.q-label{font-weight:600;font-size:15px}
-.q-meta{font-size:13px;color:var(--muted);margin-top:2px}
-.q-btn{background:var(--accent);color:#1a0d08;border:none;padding:9px 18px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:"Bricolage Grotesque";text-decoration:none;white-space:nowrap;display:inline-block}
-.q-btn:hover{filter:brightness(1.08)}
-.note{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:13px;color:var(--muted);margin-top:20px}
+.gbtn{background:var(--accent);color:#1a0d08;border:none;font-family:"Bricolage Grotesque";font-weight:700;font-size:16px;padding:14px 22px;border-radius:12px;cursor:pointer;white-space:nowrap}
+.gbtn:hover{filter:brightness(1.1)}
+.gbtn:disabled{opacity:.5;cursor:not-allowed}
+.err{display:none;margin-top:14px;background:#ff6a4d10;border:1px solid #ff6a4d44;color:#ffb9a8;border-radius:12px;padding:12px 16px;font-size:14px}
+.err.on{display:block}
+.spin{display:none;align-items:center;gap:12px;color:var(--muted);font-size:14px;margin-top:16px}
+.spin.on{display:flex}
+.sp{width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;flex-shrink:0}
+@keyframes sp{to{transform:rotate(360deg)}}
+.res{display:none;margin-top:24px}
+.res.on{display:block}
+.vi{display:flex;gap:16px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:20px}
+.vt{width:120px;height:68px;border-radius:8px;object-fit:cover;background:var(--line);flex-shrink:0}
+.vtitle{font-weight:600;font-size:15px;margin-bottom:4px}
+.vmeta{font-size:13px;color:var(--muted)}
+h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:18px;margin-bottom:14px}
+.qlist{display:flex;flex-direction:column;gap:10px}
+.qi{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.qi:hover{border-color:var(--accent)}
+.ql{font-weight:600;font-size:15px}
+.qm{font-size:13px;color:var(--muted);margin-top:2px}
+.qb{background:var(--accent);color:#1a0d08;border:none;padding:9px 18px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:"Bricolage Grotesque";text-decoration:none;display:inline-block}
+.qb:hover{filter:brightness(1.1)}
+.note{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--muted);margin-top:16px}
 footer{margin-top:40px;color:var(--faint);font-size:13px;text-align:center;padding-bottom:40px}
-@media(max-width:480px){.input-row .btn-get{flex:1 1 100%}}
 </style>
 </head>
 <body>
 <nav>
   <a href="/" class="logo">Trans<span>cribe</span></a>
-  <div class="nav-links">
-    <a href="/app.html" class="btn-sm">Transcript Tool</a>
-    <a href="/login.html" class="btn-sm">Login</a>
+  <div class="nav-r">
+    <a href="/app.html" class="nsm">Transcript Tool</a>
+    <a href="/login.html" class="nsm">Login</a>
   </div>
 </nav>
 
 <div class="wrap">
-  <div class="eyebrow">Video Downloader</div>
-  <h1>Download in <span class="em">HD.</span></h1>
+  <div class="ey">Video Downloader</div>
+  <h1>Download in <em>HD.</em></h1>
   <p class="sub">Paste any YouTube or TikTok link to get download links in multiple qualities.</p>
 
   <div class="card">
     <div class="ptabs">
-      <button class="ptab active" id="pt-yt">YouTube</button>
-      <button class="ptab" id="pt-tt">TikTok</button>
+      <button class="ptab on" id="pyt">YouTube</button>
+      <button class="ptab" id="ptt">TikTok</button>
     </div>
-    <div class="field">
-      <label id="dl-label">YouTube video link</label>
-      <div class="input-row">
-        <input type="text" id="dl-url" placeholder="https://www.youtube.com/watch?v=..."/>
-        <button class="btn-get" id="dl-go">Get Links</button>
-      </div>
+    <lbl id="lbl">YouTube video link</lbl>
+    <div class="row">
+      <input type="text" id="vurl" placeholder="https://www.youtube.com/watch?v=..."/>
+      <button class="gbtn" id="gbtn">Get Links</button>
     </div>
-    <div class="msg" id="dl-err"></div>
-    <div class="spinner-wrap" id="dl-spin"><div class="spinner"></div> Fetching video info...</div>
+    <div class="err" id="verr"></div>
+    <div class="spin" id="vspin"><div class="sp"></div> Fetching video info...</div>
   </div>
 
-  <div class="result" id="dl-result">
-    <div class="video-info" id="video-info"></div>
-    <div class="q-section">
-      <h3>Download Options</h3>
-      <div class="q-list" id="q-list"></div>
-    </div>
+  <div class="res" id="vres">
+    <div class="vi" id="vinfo"></div>
+    <h3>Download Options</h3>
+    <div class="qlist" id="qlist"></div>
     <div class="note">Downloads are for personal use only. Please respect copyright laws.</div>
   </div>
 
-  <footer>2026 Transcribe · <a href="/" style="color:var(--faint)">Home</a></footer>
+  <footer>2026 Transcribe &middot; <a href="/" style="color:var(--faint)">Home</a></footer>
 </div>
 
 <script>
-var platform = "yt";
+(function() {
+  var plt = "yt";
+  var urlEl = document.getElementById("vurl");
+  var btn = document.getElementById("gbtn");
+  var errEl = document.getElementById("verr");
+  var spinEl = document.getElementById("vspin");
+  var resEl = document.getElementById("vres");
+  var infoEl = document.getElementById("vinfo");
+  var listEl = document.getElementById("qlist");
+  var lblEl = document.getElementById("lbl");
 
-document.getElementById("pt-yt").addEventListener("click", function() { setPlatform("yt"); });
-document.getElementById("pt-tt").addEventListener("click", function() { setPlatform("tt"); });
-document.getElementById("dl-go").addEventListener("click", function() { fetchInfo(); });
-document.getElementById("dl-url").addEventListener("keydown", function(e) { if (e.key === "Enter") fetchInfo(); });
+  document.getElementById("pyt").addEventListener("click", function() {
+    plt = "yt";
+    document.getElementById("pyt").classList.add("on");
+    document.getElementById("ptt").classList.remove("on");
+    lblEl.textContent = "YouTube video link";
+    urlEl.placeholder = "https://www.youtube.com/watch?v=...";
+    urlEl.value = "";
+    errEl.className = "err";
+    resEl.className = "res";
+  });
 
-function setPlatform(p) {
-  platform = p;
-  document.getElementById("pt-yt").classList.toggle("active", p === "yt");
-  document.getElementById("pt-tt").classList.toggle("active", p === "tt");
-  document.getElementById("dl-label").textContent = p === "yt" ? "YouTube video link" : "TikTok video link";
-  document.getElementById("dl-url").placeholder = p === "yt" ? "https://www.youtube.com/watch?v=..." : "https://www.tiktok.com/@user/video/...";
-  document.getElementById("dl-result").classList.remove("on");
-  document.getElementById("dl-err").className = "msg";
-  document.getElementById("dl-url").value = "";
-}
+  document.getElementById("ptt").addEventListener("click", function() {
+    plt = "tt";
+    document.getElementById("ptt").classList.add("on");
+    document.getElementById("pyt").classList.remove("on");
+    lblEl.textContent = "TikTok video link";
+    urlEl.placeholder = "https://www.tiktok.com/@user/video/...";
+    urlEl.value = "";
+    errEl.className = "err";
+    resEl.className = "res";
+  });
 
-async function fetchInfo() {
-  var url = document.getElementById("dl-url").value.trim();
-  if (!url) { showErr("Please paste a video link."); return; }
-  var btn = document.getElementById("dl-go");
-  btn.disabled = true;
-  btn.textContent = "Loading...";
-  document.getElementById("dl-spin").classList.add("on");
-  document.getElementById("dl-err").className = "msg";
-  document.getElementById("dl-result").classList.remove("on");
+  btn.addEventListener("click", doFetch);
+  urlEl.addEventListener("keydown", function(e) { if (e.key === "Enter") doFetch(); });
 
-  try {
-    var r = await fetch("/api/video-info", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: url, platform: platform })
-    });
-    var data = await r.json();
-    if (!r.ok) throw new Error(data.error || "Could not fetch video info.");
-    renderResult(data);
-  } catch(e) {
-    showErr(e.message);
-  } finally {
-    document.getElementById("dl-spin").classList.remove("on");
-    btn.disabled = false;
-    btn.textContent = "Get Links";
+  async function doFetch() {
+    var url = urlEl.value.trim();
+    if (!url) { showErr("Please paste a video link."); return; }
+    btn.disabled = true;
+    btn.textContent = "Loading...";
+    spinEl.className = "spin on";
+    errEl.className = "err";
+    resEl.className = "res";
+
+    try {
+      var r = await fetch("/api/video-info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url, platform: plt })
+      });
+      var d = await r.json();
+      if (!r.ok) { showErr(d.error || "Could not fetch."); return; }
+      showResult(d);
+    } catch(e) {
+      showErr(e.message || "Network error.");
+    } finally {
+      spinEl.className = "spin";
+      btn.disabled = false;
+      btn.textContent = "Get Links";
+    }
   }
-}
 
-function showErr(m) {
-  var el = document.getElementById("dl-err");
-  el.textContent = m;
-  el.className = "msg err";
-}
-
-function renderResult(data) {
-  var infoEl = document.getElementById("video-info");
-  var thumbHtml = data.thumbnail ? '<img class="thumb" src="' + data.thumbnail + '" onerror="this.style.display='none'"/>' : "";
-  infoEl.innerHTML = thumbHtml + '<div><div class="video-title">' + (data.title || "Video") + '</div><div class="video-meta">' + (data.duration || "") + (data.channel ? " · " + data.channel : "") + '</div></div>';
-
-  var list = document.getElementById("q-list");
-  if (!data.formats || data.formats.length === 0) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:12px">No download links found.</div>';
-  } else {
-    list.innerHTML = data.formats.map(function(f) {
-      return '<div class="q-item"><div><div class="q-label">' + f.quality + '</div><div class="q-meta">' + f.ext + (f.size ? " · " + f.size : "") + '</div></div><a class="q-btn" href="' + f.url + '" target="_blank">Download</a></div>';
-    }).join("");
+  function showErr(m) {
+    errEl.textContent = m;
+    errEl.className = "err on";
   }
-  document.getElementById("dl-result").classList.add("on");
-}
+
+  function showResult(d) {
+    var th = d.thumbnail ? '<img class="vt" src="' + d.thumbnail + '" onerror="this.style.display='none'"/>' : '<div class="vt"></div>';
+    infoEl.innerHTML = th + '<div><div class="vtitle">' + (d.title || "Video") + '</div><div class="vmeta">' + (d.duration || "") + (d.channel ? " &middot; " + d.channel : "") + '</div></div>';
+
+    if (!d.formats || d.formats.length === 0) {
+      listEl.innerHTML = '<div style="color:var(--muted);padding:12px">No download links found.</div>';
+    } else {
+      listEl.innerHTML = d.formats.map(function(f) {
+        return '<div class="qi"><div><div class="ql">' + f.quality + '</div><div class="qm">' + f.ext + '</div></div><a class="qb" href="' + f.url + '" target="_blank">Download</a></div>';
+      }).join("");
+    }
+    resEl.className = "res on";
+  }
+})();
 </script>
 </body>
 </html>
