@@ -5,6 +5,7 @@ const https = require("https");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const RAPID_API_KEY = process.env.RAPID_API_KEY || "2b8d22e53emsh91b83d42b01f4dap1e3b20jsn84a2034a2ac8";
 
 app.use(cors());
 app.use(express.json());
@@ -37,142 +38,69 @@ function extractVideoId(input) {
 
 function httpsGet(url, headers) {
   return new Promise(function(resolve, reject) {
-    const opts = {
-      headers: headers || {},
-      timeout: 10000
-    };
-    https.get(url, opts, function(res) {
-      // Handle redirects
-      if (res.statusCode === 301 || res.statusCode === 302) {
-        return httpsGet(res.headers.location, headers).then(resolve).catch(reject);
-      }
+    https.get(url, { headers: headers || {} }, function(res) {
       let data = "";
       res.on("data", function(c) { data += c; });
       res.on("end", function() { resolve({ status: res.statusCode, body: data }); });
-    }).on("error", reject).on("timeout", function() { reject(new Error("Request timed out")); });
+    }).on("error", reject);
   });
 }
 
-async function fetchTranscript(videoId, lang) {
-  const headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Encoding": "identity",
-    "Connection": "keep-alive",
-  };
-
-  const pageRes = await httpsGet("https://www.youtube.com/watch?v=" + videoId + "&hl=en", headers);
-  
-  if (pageRes.status !== 200) {
-    throw new Error("Could not access YouTube video (status " + pageRes.status + ")");
-  }
-
-  const html = pageRes.body;
-
-  // Try multiple regex patterns to find captions
-  let captionTracks = null;
-
-  // Pattern 1: standard
-  const m1 = html.match(/"captionTracks":\s*(\[.*?\])\s*,\s*"audioTracks"/);
-  if (m1) {
-    try { captionTracks = JSON.parse(m1[1]); } catch(e) {}
-  }
-
-  // Pattern 2: alternative
-  if (!captionTracks) {
-    const m2 = html.match(/"captionTracks":\s*(\[[\s\S]*?\])/);
-    if (m2) {
-      try { captionTracks = JSON.parse(m2[1]); } catch(e) {}
-    }
-  }
-
-  // Pattern 3: playerCaptionsTracklistRenderer
-  if (!captionTracks) {
-    const m3 = html.match(/"playerCaptionsTracklistRenderer":\s*\{.*?"captionTracks":\s*(\[[\s\S]*?\])/);
-    if (m3) {
-      try { captionTracks = JSON.parse(m3[1]); } catch(e) {}
-    }
-  }
-
-  if (!captionTracks || captionTracks.length === 0) {
-    if (html.includes("VIDEO_UNAVAILABLE") || html.includes('"status":"ERROR"')) {
-      throw new Error("This video is unavailable or private.");
-    }
-    if (html.includes("Sign in") && html.length < 50000) {
-      throw new Error("YouTube is requiring sign-in for this video.");
-    }
-    throw new Error("No captions found. This video must have captions/subtitles enabled.");
-  }
-
-  // Select track by language
-  let track = captionTracks[0];
-  if (lang && lang !== "auto") {
-    const found = captionTracks.find(function(t) {
-      return t.languageCode && t.languageCode.toLowerCase().startsWith(lang.toLowerCase());
-    });
-    if (found) track = found;
-  }
-
-  if (!track || !track.baseUrl) {
-    throw new Error("Caption track URL not found.");
-  }
-
-  // Fetch XML captions (more reliable than json3)
-  const xmlUrl = track.baseUrl + "&fmt=srv3";
-  const captionRes = await httpsGet(xmlUrl, headers);
-
-  if (captionRes.status !== 200) {
-    throw new Error("Could not download captions (status " + captionRes.status + ")");
-  }
-
-  const xml = captionRes.body;
+// Parse VTT subtitle format
+function parseVTT(vtt) {
   const segments = [];
-
-  // Parse XML/ttml format
-  const regex = /<p[^>]+t="(\d+)"[^>]*d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
-  let match;
-  while ((match = regex.exec(xml)) !== null) {
-    const startMs = parseInt(match[1]);
-    const text = match[3]
-      .replace(/<[^>]+>/g, "")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/\n/g, " ")
-      .trim();
-    if (text) {
-      const offset = startMs / 1000;
-      segments.push({ text: text, offset: offset, time: formatTime(offset) });
-    }
-  }
-
-  // Fallback: try srv1 format (plain text)
-  if (segments.length === 0) {
-    const srv1Url = track.baseUrl + "&fmt=srv1";
-    const srv1Res = await httpsGet(srv1Url, headers);
-    const srv1 = srv1Res.body;
-    const rx2 = /<text start="([^"]+)"[^>]*>([\s\S]*?)<\/text>/g;
-    let m2;
-    while ((m2 = rx2.exec(srv1)) !== null) {
-      const offset = parseFloat(m2[1]);
-      const text = m2[2]
-        .replace(/<[^>]+>/g, "")
-        .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-        .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-        .replace(/\n/g, " ").trim();
-      if (text) {
-        segments.push({ text: text, offset: offset, time: formatTime(offset) });
+  const lines = vtt.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    // Time line: 00:00:01.000 --> 00:00:04.000
+    const timeMatch = line.match(/(\d{2}:\d{2}:\d{2}[\.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[\.,]\d{3})/);
+    if (timeMatch) {
+      const startStr = timeMatch[1].replace(",", ".");
+      const parts = startStr.split(":");
+      const seconds = parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+      i++;
+      let text = "";
+      while (i < lines.length && lines[i].trim() !== "") {
+        text += (text ? " " : "") + lines[i].trim().replace(/<[^>]+>/g, "");
+        i++;
+      }
+      text = text.trim();
+      if (text && !text.startsWith("WEBVTT") && !text.startsWith("NOTE")) {
+        segments.push({ text: text, offset: seconds, time: formatTime(seconds) });
       }
     }
+    i++;
+  }
+  return segments;
+}
+
+async function fetchViaRapidAPI(videoId, lang) {
+  const language = (lang && lang !== "auto") ? lang : "en";
+  const url = "https://youtube-captions-transcript-subtitles-video-combiner.p.rapidapi.com/download-webvtt/" + videoId + "XI?language=" + language + "&response_mode=default";
+  
+  const headers = {
+    "x-rapidapi-key": RAPID_API_KEY,
+    "x-rapidapi-host": "youtube-captions-transcript-subtitles-video-combiner.p.rapidapi.com",
+    "Content-Type": "application/json"
+  };
+
+  const res = await httpsGet(url, headers);
+  
+  if (res.status === 404) {
+    // Try without language (auto)
+    const url2 = "https://youtube-captions-transcript-subtitles-video-combiner.p.rapidapi.com/download-webvtt/" + videoId + "XI?language=en&response_mode=default";
+    const res2 = await httpsGet(url2, headers);
+    if (res2.status !== 200) throw new Error("No captions found for this video.");
+    return parseVTT(res2.body);
+  }
+  
+  if (res.status !== 200) {
+    throw new Error("API error (status " + res.status + "): " + res.body.substring(0, 100));
   }
 
-  if (segments.length === 0) {
-    throw new Error("Captions downloaded but could not be parsed. Please try another video.");
-  }
-
+  const segments = parseVTT(res.body);
+  if (segments.length === 0) throw new Error("No caption content found in the response.");
   return segments;
 }
 
@@ -186,7 +114,7 @@ app.post("/api/transcript", async function(req, res) {
   }
 
   try {
-    const segments = await fetchTranscript(videoId, lang);
+    const segments = await fetchViaRapidAPI(videoId, lang);
     const plain = segments.map(function(s) { return s.text; }).join(" ");
     return res.json({ videoId: videoId, count: segments.length, segments: segments, plain: plain });
   } catch(err) {
@@ -195,7 +123,7 @@ app.post("/api/transcript", async function(req, res) {
 });
 
 app.post("/api/tiktok", async function(req, res) {
-  return res.status(404).json({ error: "TikTok does not provide public caption access via API." });
+  return res.status(404).json({ error: "TikTok captions are not available via public API." });
 });
 
 app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
