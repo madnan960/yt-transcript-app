@@ -236,6 +236,68 @@ app.post("/api/find-clips", async function(req, res) {
   }
 });
 
+// Video info & download links endpoint
+app.post("/api/video-info", async function(req, res) {
+  var url = req.body && req.body.url;
+  var platform = req.body && req.body.platform;
+  if (!url) return res.status(400).json({ error: "Please provide a video URL." });
+
+  try {
+    if (platform === "tt" || url.includes("tiktok.com")) {
+      // TikTok via RapidAPI
+      var opts = {
+        method: "GET",
+        hostname: "tiktok-video-transcript.p.rapidapi.com",
+        path: "/transcribe?url=" + encodeURIComponent(url) + "&language=en-US&timestamps=false",
+        headers: {
+          "x-rapidapi-key": GROQ_KEY,
+          "x-rapidapi-host": "tiktok-video-transcript.p.rapidapi.com"
+        }
+      };
+      // For TikTok, provide snaptik fallback
+      return res.json({
+        title: "TikTok Video",
+        thumbnail: "",
+        duration: "",
+        channel: "TikTok",
+        formats: [
+          { quality: "HD (No Watermark)", ext: "mp4", url: "https://snaptik.app/?url=" + encodeURIComponent(url), size: "" },
+          { quality: "Standard", ext: "mp4", url: "https://tikmate.online/?url=" + encodeURIComponent(url), size: "" }
+        ]
+      });
+    }
+
+    // YouTube - extract video ID and provide download options
+    var videoId = null;
+    var patterns = [/(?:v=|\/)([0-9A-Za-z_-]{11})/, /(?:youtu\.be\/)([0-9A-Za-z_-]{11})/];
+    for (var i = 0; i < patterns.length; i++) {
+      var m = url.match(patterns[i]);
+      if (m) { videoId = m[1]; break; }
+    }
+    if (!videoId && /^[0-9A-Za-z_-]{11}$/.test(url.trim())) videoId = url.trim();
+
+    if (!videoId) return res.status(400).json({ error: "Invalid YouTube URL." });
+
+    // Provide y2mate / cobalt.tools links for YouTube download
+    return res.json({
+      title: "YouTube Video",
+      thumbnail: "https://img.youtube.com/vi/" + videoId + "/mqdefault.jpg",
+      duration: "",
+      channel: "YouTube",
+      videoId: videoId,
+      formats: [
+        { quality: "1080p HD", ext: "mp4", url: "https://cobalt.tools/#" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId), size: "" },
+        { quality: "720p HD", ext: "mp4", url: "https://y2mate.com/youtube/" + videoId, size: "" },
+        { quality: "480p", ext: "mp4", url: "https://yt1s.com/en/youtube-to-mp4?q=" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId), size: "" },
+        { quality: "MP3 Audio", ext: "mp3", url: "https://y2mate.com/youtube-mp3/" + videoId, size: "" }
+      ]
+    });
+
+  } catch(err) {
+    return res.status(500).json({ error: "Could not fetch video info: " + (err.message || "Unknown error") });
+  }
+});
+
 app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
 app.get("/", function(req, res) { res.sendFile(path.join(__dirname, "public", "index.html")); });
 app.listen(PORT, function() { console.log("Server running on port " + PORT); });
