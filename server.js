@@ -242,20 +242,14 @@ app.post("/api/find-clips", async function(req, res) {
   }
 });
 
-// Video info & download links endpoint
+// Video info & download links endpoint (YT Downloader - yt-downloader1)
 app.post("/api/video-info", async function(req, res) {
   var url = req.body && req.body.url;
   var platform = req.body && req.body.platform;
   if (!url) return res.status(400).json({ error: "Please provide a video URL." });
 
   try {
-    var videoId = null;
-    var ytPatterns = [/(?:v=|\/)([0-9A-Za-z_-]{11})/, /(?:youtu\.be\/)([0-9A-Za-z_-]{11})/, /(?:shorts\/)([0-9A-Za-z_-]{11})/];
-    for (var i = 0; i < ytPatterns.length; i++) {
-      var m = url.match(ytPatterns[i]);
-      if (m) { videoId = m[1]; break; }
-    }
-    if (!videoId && /^[0-9A-Za-z_-]{11}$/.test(url.trim())) videoId = url.trim();
+    var videoId = extractVideoId(url);
 
     if (platform === "tt" || (!videoId && url.includes("tiktok.com"))) {
       return res.json({
@@ -266,13 +260,14 @@ app.post("/api/video-info", async function(req, res) {
 
     if (!videoId) return res.status(400).json({ error: "Invalid YouTube URL." });
 
+    var fullUrl = "https://www.youtube.com/watch?v=" + videoId;
     var opts = {
       method: "GET",
-      hostname: "youtube-cdn-progress.p.rapidapi.com",
-      path: "/mp4?id=" + videoId,
+      hostname: "yt-downloader1.p.rapidapi.com",
+      path: "/api?url=" + encodeURIComponent(fullUrl) + "&key=" + RAPID_KEY,
       headers: {
         "x-rapidapi-key": RAPID_KEY,
-        "x-rapidapi-host": "youtube-cdn-progress.p.rapidapi.com"
+        "x-rapidapi-host": "yt-downloader1.p.rapidapi.com"
       }
     };
 
@@ -281,40 +276,41 @@ app.post("/api/video-info", async function(req, res) {
     if (apiRes.status === 200) {
       var data = JSON.parse(apiRes.body);
 
-      if (data.error === false && data.medias && Array.isArray(data.medias)) {
-        var formats = data.medias.map(function(m) {
+      if (data && Array.isArray(data.medias) && data.medias.length > 0) {
+        // Prefer progressive formats (video + audio combined) so downloads have sound
+        var all = data.medias;
+        var progressive = all.filter(function(m) { return !m.requiresMerge; });
+        var list = progressive.length > 0 ? progressive : all;
+
+        var formats = list.map(function(m) {
+          var q = m.quality || m.label || "Video";
+          var isAudio = /kbps/i.test(String(q));
+          var extStr = (m.extension || "mp4") + (m.formattedSize ? " \u00b7 " + m.formattedSize : "");
           return {
-            quality: m.label || m.quality,
-            ext: m.extension || "mp4",
+            quality: isAudio ? "Audio (" + q + ")" : q,
+            ext: extStr,
             url: m.url,
-            size: m.size || "",
-            type: m.type || "video"
+            size: m.formattedSize || ""
           };
         });
 
-        var thumb = "";
-        if (data.thumbnail && data.thumbnail.thumbnails && data.thumbnail.thumbnails.length > 0) {
-          var thumbs = data.thumbnail.thumbnails;
-          thumb = thumbs[thumbs.length - 1].url || thumbs[0].url;
-        }
-
-        var duration = "";
-        if (data.lengthSeconds) {
-          var secs = parseInt(data.lengthSeconds);
-          duration = Math.floor(secs/60) + ":" + (secs%60).toString().padStart(2,"0");
-        }
-
         return res.json({
           title: data.title || "YouTube Video",
-          thumbnail: thumb || "https://img.youtube.com/vi/" + videoId + "/mqdefault.jpg",
+          thumbnail: (typeof data.thumbnail === "string" && data.thumbnail) ? data.thumbnail : ("https://img.youtube.com/vi/" + videoId + "/mqdefault.jpg"),
           channel: data.author || "YouTube",
-          duration: duration,
+          duration: data.duration || "",
           formats: formats
         });
       }
+      return res.status(500).json({ error: "No download links found for this video." });
     }
 
-    return res.status(500).json({ error: "Could not fetch download links. Status: " + apiRes.status });
+    var msg = "Could not fetch download links. Status: " + apiRes.status;
+    try {
+      var e = JSON.parse(apiRes.body);
+      if (e && (e.message || e.error)) msg = String(e.message || e.error);
+    } catch(_) {}
+    return res.status(500).json({ error: msg });
 
   } catch(err) {
     return res.status(500).json({ error: "Error: " + (err.message || "Unknown") });
