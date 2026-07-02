@@ -336,8 +336,10 @@ app.post("/api/video-info", async function(req, res) {
 });
 
 // Merge video + audio streams into a single mp4 via ffmpeg (streaming)
-function probeUrl(u) {
+function probeUrl(u, hops) {
+  hops = hops || 0;
   return new Promise(function(resolve) {
+    if (hops > 4) return resolve("TOO_MANY_REDIRECTS");
     try {
       var uu = new URL(u);
       var rq = https.request({
@@ -346,13 +348,22 @@ function probeUrl(u) {
         path: uu.pathname + uu.search,
         headers: { "Range": "bytes=0-1023", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
       }, function(r) {
-        resolve(r.statusCode);
+        var sc = r.statusCode;
+        if ((sc === 301 || sc === 302 || sc === 303 || sc === 307 || sc === 308) && r.headers.location) {
+          var next = r.headers.location;
+          r.destroy();
+          probeUrl(next, hops + 1).then(function(final) {
+            resolve({ status: final.status !== undefined ? final.status : final, finalUrl: final.finalUrl || next });
+          });
+          return;
+        }
         r.destroy();
+        resolve({ status: sc, finalUrl: u });
       });
-      rq.on("error", function(e) { resolve("ERR: " + e.message); });
-      rq.setTimeout(10000, function() { rq.destroy(); resolve("TIMEOUT"); });
+      rq.on("error", function(e) { resolve({ status: "ERR: " + e.message, finalUrl: u }); });
+      rq.setTimeout(10000, function() { rq.destroy(); resolve({ status: "TIMEOUT", finalUrl: u }); });
       rq.end();
-    } catch (e) { resolve("ERR: " + e.message); }
+    } catch (e) { resolve({ status: "ERR: " + e.message, finalUrl: u }); }
   });
 }
 
@@ -368,19 +379,23 @@ app.get("/api/merge", async function(req, res) {
     }
   } catch (e) { return res.status(400).send("Invalid URL"); }
 
-  // Diagnostic: check that both source streams are reachable from this server
-  var vStatus = await probeUrl(v);
-  var aStatus = await probeUrl(a);
-  console.log("merge probe: video=" + vStatus + " audio=" + aStatus);
-  if (!(vStatus === 200 || vStatus === 206) || !(aStatus === 200 || aStatus === 206)) {
-    return res.status(502).send("Source streams not reachable from server. Video status: " + vStatus + ", Audio status: " + aStatus + ". (Links may be expired or IP-locked by YouTube)");
+  // Check both source streams (following redirects) and use the final resolved URLs
+  var vProbe = await probeUrl(v);
+  var aProbe = await probeUrl(a);
+  console.log("merge probe: video=" + vProbe.status + " audio=" + aProbe.status);
+  if (!(vProbe.status === 200 || vProbe.status === 206) || !(aProbe.status === 200 || aProbe.status === 206)) {
+    return res.status(502).send("Source streams not reachable from server. Video status: " + vProbe.status + ", Audio status: " + aProbe.status + ". Try clicking Get Links again for fresh links.");
   }
+  var vFinal = vProbe.finalUrl || v;
+  var aFinal = aProbe.finalUrl || a;
 
+  var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
   var ff = spawn(ffmpegPath, [
     "-loglevel", "warning",
-    "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    "-i", v,
-    "-i", a,
+    "-user_agent", UA, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+    "-i", vFinal,
+    "-user_agent", UA, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+    "-i", aFinal,
     "-map", "0:v:0",
     "-map", "1:a:0",
     "-c:v", "copy",
