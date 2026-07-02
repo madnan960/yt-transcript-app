@@ -257,3 +257,98 @@ app.listen(PORT, function() { console.log("Server running on port " + PORT); });
 
 
 
+
+
+// AI Clip Finder endpoint
+app.post("/api/find-clips", async function(req, res) {
+  const segments = req.body && req.body.segments;
+  const plain = req.body && req.body.plain;
+  const duration = req.body && req.body.duration;
+
+  if (!segments || !plain) {
+    return res.status(400).json({ error: "No transcript provided." });
+  }
+
+  // Determine clip count based on video duration (in minutes)
+  const durationMins = duration ? duration / 60 : 0;
+  const clipCount = durationMins >= 30 ? "7-8" : durationMins >= 15 ? "4-5" : "3-4";
+
+  // Build transcript with timestamps for Claude
+  const transcriptWithTime = segments.map(function(s) {
+    return "[" + s.time + "] " + s.text;
+  }).join("\n");
+
+  const prompt = `You are a viral content expert. Analyze this video transcript and find the ${clipCount} best clips that would go viral on YouTube Shorts or TikTok.
+
+RULES:
+- Each clip must be exactly 40-45 seconds long (find start and end timestamps)
+- Pick the most engaging, surprising, funny, or valuable moments
+- Clips must make sense on their own without context
+- Return ONLY valid JSON, no other text
+
+TRANSCRIPT:
+${transcriptWithTime.substring(0, 8000)}
+
+Return this exact JSON format:
+{
+  "clips": [
+    {
+      "clip_number": 1,
+      "start_time": "00:00",
+      "end_time": "00:42",
+      "start_seconds": 0,
+      "end_seconds": 42,
+      "title": "Catchy viral title here",
+      "hook": "First sentence that grabs attention",
+      "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"],
+      "why_viral": "One sentence why this clip will go viral"
+    }
+  ]
+}`;
+
+  try {
+    const https = require("https");
+    const body = JSON.stringify({
+      model: "claude-haiku-4-5",
+      max_tokens: 2000,
+      messages: [{ role: "user", content: prompt }]
+    });
+
+    const data = await new Promise(function(resolve, reject) {
+      const reqOptions = {
+        hostname: "api.anthropic.com",
+        path: "/v1/messages",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ANTHROPIC_API_KEY || "",
+          "anthropic-version": "2023-06-01",
+          "Content-Length": Buffer.byteLength(body)
+        }
+      };
+
+      const r = https.request(reqOptions, function(response) {
+        let d = "";
+        response.on("data", function(c) { d += c; });
+        response.on("end", function() { resolve(JSON.parse(d)); });
+      });
+      r.on("error", reject);
+      r.write(body);
+      r.end();
+    });
+
+    if (!data.content || !data.content[0]) {
+      return res.status(500).json({ error: "AI response empty." });
+    }
+
+    const text = data.content[0].text;
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.status(500).json({ error: "Could not parse AI response." });
+
+    const clips = JSON.parse(jsonMatch[0]);
+    return res.json(clips);
+
+  } catch(err) {
+    return res.status(500).json({ error: "AI error: " + (err.message || "Unknown") });
+  }
+});
