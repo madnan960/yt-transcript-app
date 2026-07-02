@@ -174,10 +174,70 @@ app.post("/api/transcript", async function(req, res) {
 });
 
 app.post("/api/tiktok", async function(req, res) {
-  return res.status(404).json({ error: "TikTok captions are not available via public API." });
+  const url = req.body && req.body.url;
+  if (!url || !url.includes("tiktok.com")) {
+    return res.status(400).json({ error: "Please enter a valid TikTok video link." });
+  }
+
+  try {
+    const apiUrl = "https://tiktok-video-transcript.p.rapidapi.com/transcribe?url=" + encodeURIComponent(url) + "&language=en-US&timestamps=true";
+    const options = {
+      method: "GET",
+      hostname: "tiktok-video-transcript.p.rapidapi.com",
+      path: "/transcribe?url=" + encodeURIComponent(url) + "&language=en-US&timestamps=true",
+      headers: {
+        "x-rapidapi-key": RAPID_KEY,
+        "x-rapidapi-host": "tiktok-video-transcript.p.rapidapi.com",
+        "Content-Type": "application/json"
+      }
+    };
+
+    const result = await httpsGet(options);
+    
+    if (result.status !== 200) {
+      return res.status(404).json({ error: "Could not fetch TikTok transcript (status " + result.status + ")." });
+    }
+
+    let data;
+    try { data = JSON.parse(result.body); } catch(e) {
+      return res.status(500).json({ error: "Could not parse TikTok response." });
+    }
+
+    if (!data.success || !data.text) {
+      return res.status(404).json({ error: "No transcript found for this TikTok video." });
+    }
+
+    // Parse timestamps if available
+    const segments = [];
+    if (data.words && Array.isArray(data.words)) {
+      data.words.forEach(function(w) {
+        if (w.text && w.start !== undefined) {
+          segments.push({ text: w.text, offset: w.start, time: formatTime(w.start) });
+        }
+      });
+    }
+
+    if (segments.length === 0) {
+      // Return as plain text if no word-level timestamps
+      segments.push({ text: data.text, offset: 0, time: "00:00" });
+    }
+
+    const plain = data.text;
+    const videoId = url.match(/video\/(\d+)/);
+    return res.json({ 
+      videoId: videoId ? videoId[1] : "tiktok", 
+      count: segments.length, 
+      segments: segments, 
+      plain: plain 
+    });
+
+  } catch(err) {
+    return res.status(500).json({ error: "TikTok transcript error: " + (err.message || "Unknown error") });
+  }
 });
 
 app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
 app.get("/", function(req, res) { res.sendFile(path.join(__dirname, "public", "index.html")); });
 app.listen(PORT, function() { console.log("Server running on port " + PORT); });
+
 
