@@ -244,57 +244,105 @@ app.post("/api/video-info", async function(req, res) {
 
   try {
     if (platform === "tt" || url.includes("tiktok.com")) {
-      // TikTok via RapidAPI
-      var opts = {
+      // TikTok download via RapidAPI
+      var ttOpts = {
         method: "GET",
-        hostname: "tiktok-video-transcript.p.rapidapi.com",
-        path: "/transcribe?url=" + encodeURIComponent(url) + "&language=en-US&timestamps=false",
+        hostname: "tiktok-video-no-watermark2.p.rapidapi.com",
+        path: "/index?url=" + encodeURIComponent(url) + "&hd=1",
         headers: {
-          "x-rapidapi-key": GROQ_KEY,
-          "x-rapidapi-host": "tiktok-video-transcript.p.rapidapi.com"
+          "x-rapidapi-key": RAPID_KEY,
+          "x-rapidapi-host": "tiktok-video-no-watermark2.p.rapidapi.com"
         }
       };
-      // For TikTok, provide snaptik fallback
+      var ttRes = await httpsRequest(ttOpts);
+      if (ttRes.status === 200) {
+        try {
+          var ttData = JSON.parse(ttRes.body);
+          var formats = [];
+          if (ttData.data) {
+            if (ttData.data.hdplay) formats.push({ quality: "HD (No Watermark)", ext: "mp4", url: ttData.data.hdplay, size: ttData.data.hd_size || "" });
+            if (ttData.data.play) formats.push({ quality: "SD (No Watermark)", ext: "mp4", url: ttData.data.play, size: ttData.data.size || "" });
+            if (ttData.data.wmplay) formats.push({ quality: "With Watermark", ext: "mp4", url: ttData.data.wmplay, size: "" });
+          }
+          if (formats.length > 0) {
+            return res.json({
+              title: ttData.data && ttData.data.title || "TikTok Video",
+              thumbnail: ttData.data && ttData.data.cover || "",
+              channel: ttData.data && ttData.data.author && ttData.data.author.nickname || "TikTok",
+              formats: formats
+            });
+          }
+        } catch(e) {}
+      }
+      // Fallback
       return res.json({
         title: "TikTok Video",
         thumbnail: "",
-        duration: "",
         channel: "TikTok",
         formats: [
-          { quality: "HD (No Watermark)", ext: "mp4", url: "https://snaptik.app/?url=" + encodeURIComponent(url), size: "" },
-          { quality: "Standard", ext: "mp4", url: "https://tikmate.online/?url=" + encodeURIComponent(url), size: "" }
+          { quality: "Download (No Watermark)", ext: "mp4", url: "https://snaptik.app/?url=" + encodeURIComponent(url), size: "" }
         ]
       });
     }
 
-    // YouTube - extract video ID and provide download options
+    // YouTube download via RapidAPI
     var videoId = null;
-    var patterns = [/(?:v=|\/)([0-9A-Za-z_-]{11})/, /(?:youtu\.be\/)([0-9A-Za-z_-]{11})/];
-    for (var i = 0; i < patterns.length; i++) {
-      var m = url.match(patterns[i]);
+    var ytPatterns = [/(?:v=|\/)([0-9A-Za-z_-]{11})/, /(?:youtu\.be\/)([0-9A-Za-z_-]{11})/];
+    for (var i = 0; i < ytPatterns.length; i++) {
+      var m = url.match(ytPatterns[i]);
       if (m) { videoId = m[1]; break; }
     }
     if (!videoId && /^[0-9A-Za-z_-]{11}$/.test(url.trim())) videoId = url.trim();
-
     if (!videoId) return res.status(400).json({ error: "Invalid YouTube URL." });
 
-    // Provide y2mate / cobalt.tools links for YouTube download
+    // Use YouTube downloader RapidAPI
+    var ytOpts = {
+      method: "GET",
+      hostname: "youtube-video-download-info.p.rapidapi.com",
+      path: "/dl?id=" + videoId,
+      headers: {
+        "x-rapidapi-key": RAPID_KEY,
+        "x-rapidapi-host": "youtube-video-download-info.p.rapidapi.com"
+      }
+    };
+    var ytRes = await httpsRequest(ytOpts);
+    if (ytRes.status === 200) {
+      try {
+        var ytData = JSON.parse(ytRes.body);
+        var formats = [];
+        if (ytData.link && Array.isArray(ytData.link)) {
+          ytData.link.forEach(function(l) {
+            if (l[0] && l[1]) {
+              formats.push({ quality: l[1], ext: "mp4", url: l[0], size: l[3] || "" });
+            }
+          });
+        }
+        if (formats.length > 0) {
+          return res.json({
+            title: ytData.title || "YouTube Video",
+            thumbnail: "https://img.youtube.com/vi/" + videoId + "/mqdefault.jpg",
+            channel: "YouTube",
+            formats: formats.slice(0, 5)
+          });
+        }
+      } catch(e) {}
+    }
+
+    // Fallback: provide working external links
     return res.json({
       title: "YouTube Video",
       thumbnail: "https://img.youtube.com/vi/" + videoId + "/mqdefault.jpg",
-      duration: "",
       channel: "YouTube",
-      videoId: videoId,
       formats: [
-        { quality: "1080p HD", ext: "mp4", url: "https://cobalt.tools/#" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId), size: "" },
-        { quality: "720p HD", ext: "mp4", url: "https://y2mate.com/youtube/" + videoId, size: "" },
-        { quality: "480p", ext: "mp4", url: "https://yt1s.com/en/youtube-to-mp4?q=" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId), size: "" },
-        { quality: "MP3 Audio", ext: "mp3", url: "https://y2mate.com/youtube-mp3/" + videoId, size: "" }
+        { quality: "1080p Full HD", ext: "mp4", url: "https://loader.to/api/button/?url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId) + "&f=mp4", size: "" },
+        { quality: "720p HD", ext: "mp4", url: "https://yt5s.io/en/youtube-to-mp4?q=" + encodeURIComponent("https://youtu.be/" + videoId), size: "" },
+        { quality: "480p", ext: "mp4", url: "https://ssyoutube.com/en/youtube-to-mp4?q=" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId), size: "" },
+        { quality: "MP3 Audio", ext: "mp3", url: "https://yt5s.io/en/youtube-to-mp3?q=" + encodeURIComponent("https://youtu.be/" + videoId), size: "" }
       ]
     });
 
   } catch(err) {
-    return res.status(500).json({ error: "Could not fetch video info: " + (err.message || "Unknown error") });
+    return res.status(500).json({ error: "Could not fetch: " + (err.message || "Unknown") });
   }
 });
 
