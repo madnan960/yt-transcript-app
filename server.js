@@ -336,7 +336,27 @@ app.post("/api/video-info", async function(req, res) {
 });
 
 // Merge video + audio streams into a single mp4 via ffmpeg (streaming)
-app.get("/api/merge", function(req, res) {
+function probeUrl(u) {
+  return new Promise(function(resolve) {
+    try {
+      var uu = new URL(u);
+      var rq = https.request({
+        method: "GET",
+        hostname: uu.hostname,
+        path: uu.pathname + uu.search,
+        headers: { "Range": "bytes=0-1023", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+      }, function(r) {
+        resolve(r.statusCode);
+        r.destroy();
+      });
+      rq.on("error", function(e) { resolve("ERR: " + e.message); });
+      rq.setTimeout(10000, function() { rq.destroy(); resolve("TIMEOUT"); });
+      rq.end();
+    } catch (e) { resolve("ERR: " + e.message); }
+  });
+}
+
+app.get("/api/merge", async function(req, res) {
   var v = req.query.v, a = req.query.a;
   var title = String(req.query.title || "video").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "video";
   if (!v || !a) return res.status(400).send("Missing video/audio URL");
@@ -348,8 +368,17 @@ app.get("/api/merge", function(req, res) {
     }
   } catch (e) { return res.status(400).send("Invalid URL"); }
 
+  // Diagnostic: check that both source streams are reachable from this server
+  var vStatus = await probeUrl(v);
+  var aStatus = await probeUrl(a);
+  console.log("merge probe: video=" + vStatus + " audio=" + aStatus);
+  if (!(vStatus === 200 || vStatus === 206) || !(aStatus === 200 || aStatus === 206)) {
+    return res.status(502).send("Source streams not reachable from server. Video status: " + vStatus + ", Audio status: " + aStatus + ". (Links may be expired or IP-locked by YouTube)");
+  }
+
   var ff = spawn(ffmpegPath, [
-    "-loglevel", "error",
+    "-loglevel", "warning",
+    "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "-i", v,
     "-i", a,
     "-map", "0:v:0",
@@ -373,19 +402,19 @@ app.get("/api/merge", function(req, res) {
     ff.stdout.pipe(res);
   });
 
-  ff.stderr.on("data", function(d) { if (errLog.length < 2000) errLog += d.toString(); });
+  ff.stderr.on("data", function(d) { if (errLog.length < 3000) errLog += d.toString(); });
 
   ff.on("error", function(e) {
     console.log("ffmpeg spawn error: " + e.message);
-    if (!started) res.status(500).send("Merge failed to start: " + e.message);
+    if (!started) res.status(500).send("Merge failed to start: " + e.message + " (ffmpegPath=" + ffmpegPath + ")");
     else res.end();
   });
 
   ff.on("close", function(codeNum) {
     if (codeNum !== 0) {
-      console.log("ffmpeg exit " + codeNum + ": " + errLog.slice(0, 500));
+      console.log("ffmpeg exit " + codeNum + ": " + errLog.slice(0, 800));
       if (!started) {
-        return res.status(500).send("Merge failed. Details: " + (errLog.slice(0, 300) || "unknown ffmpeg error"));
+        return res.status(500).send("Merge failed (ffmpeg exit " + codeNum + "). Details: " + (errLog.slice(0, 400) || "no error output"));
       }
     }
     res.end();
