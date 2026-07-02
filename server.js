@@ -435,7 +435,10 @@ app.get("/api/merge", async function(req, res) {
     res.end();
   });
 
-  req.on("close", function() { ff.kill("SIGKILL"); });
+  // Kill ffmpeg only if the client actually disconnected before the response finished
+  res.on("close", function() {
+    if (!res.writableEnded) ff.kill("SIGKILL");
+  });
 });
 
 app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
