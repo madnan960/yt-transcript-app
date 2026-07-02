@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Transcribe — YouTube se text</title>
+<title>Transcribe — YouTube & TikTok to Text</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
@@ -19,7 +19,6 @@
     --accent: #ff6a4d;
     --accent-soft: #ff6a4d22;
     --ok: #7bd88f;
-    --warn: #f5c542;
     --radius: 16px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -49,13 +48,22 @@
   h1 .em { color: var(--accent); }
   .sub { color: var(--muted); margin-top: 12px; font-size: clamp(15px, 3.5vw, 17px); max-width: 46ch; }
 
-  /* input card */
+  /* platform tabs */
+  .tabs { display: flex; gap: 8px; margin-top: clamp(20px, 4vw, 32px); }
+  .tab {
+    padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--line); background: var(--surface);
+    color: var(--muted); transition: all .15s; font-family: "Inter";
+  }
+  .tab.active { background: var(--accent); color: #1a0d08; border-color: var(--accent); }
+  .tab:hover:not(.active) { border-color: var(--accent); color: var(--ink); }
+
   .card {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: clamp(16px, 3vw, 24px);
-    margin-top: clamp(20px, 4vw, 32px);
+    margin-top: 12px;
   }
   .field { display: flex; flex-direction: column; gap: 10px; }
   label {
@@ -102,10 +110,8 @@
   }
   .lang select:focus { outline: none; border-color: var(--accent); }
 
-  /* messages */
   .msg { margin-top: 14px; font-size: 14px; border-radius: 12px; padding: 12px 16px; display: none; }
   .msg.err { display: block; background: #ff6a4d10; border: 1px solid #ff6a4d44; color: #ffb9a8; }
-  .msg.warn { display: block; background: #f5c54210; border: 1px solid #f5c54244; color: #f5c542; }
   .loading { display: none; margin-top: 22px; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
   .loading.on { display: flex; }
   .spinner {
@@ -115,7 +121,6 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* result */
   .result { display: none; margin-top: clamp(24px, 4vw, 36px); }
   .result.on { display: block; animation: rise .4s ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -155,12 +160,14 @@
   .transcript::-webkit-scrollbar { width: 8px; }
   .transcript::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
 
-  /* word count badge */
-  .badge {
-    display: inline-block; background: var(--surface-2); border: 1px solid var(--line);
-    border-radius: 8px; padding: 4px 10px; font-size: 12px; color: var(--muted);
-    font-family: "JetBrains Mono", monospace; margin-left: 8px;
+  /* tiktok note */
+  .tiktok-note {
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 16px; font-size: 13px; color: var(--muted);
+    margin-top: 12px; display: none;
   }
+  .tiktok-note.on { display: block; }
+  .tiktok-note b { color: var(--ink); }
 
   footer { margin-top: 40px; color: var(--faint); font-size: 13px; text-align: center; }
 
@@ -170,9 +177,7 @@
     .line .t { min-width: 48px; }
     .actions { width: 100%; }
     .ghost { flex: 1; text-align: center; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    * { animation: none !important; transition: none !important; }
+    .tabs { flex-wrap: wrap; }
   }
 </style>
 </head>
@@ -180,24 +185,30 @@
 <div class="wrap">
   <header>
     <div class="eyebrow">Speech → Text</div>
-    <h1>YouTube ko <span class="em">transcript</span> bana lo.</h1>
-    <p class="sub">Koi bhi video, shorts ya youtu.be link paste karo — pura transcript turant, timestamps ke saath ya plain text. Copy karo ya download.</p>
+    <h1>Turn any video into <span class="em">text.</span></h1>
+    <p class="sub">Paste a YouTube or TikTok link — get the full transcript instantly, with timestamps or as plain text. Copy or download.</p>
   </header>
+
+  <!-- Platform Tabs -->
+  <div class="tabs">
+    <button class="tab active" id="tab-yt" onclick="switchTab('yt')">▶ YouTube</button>
+    <button class="tab" id="tab-tt" onclick="switchTab('tt')">♪ TikTok</button>
+  </div>
 
   <div class="card">
     <div class="field">
-      <label for="url">Video link ya ID</label>
+      <label for="url" id="url-label">YouTube video link or ID</label>
       <div class="input-row">
         <input id="url" type="text" inputmode="url" autocomplete="off"
-               placeholder="https://www.youtube.com/watch?v=… ya youtu.be/… ya Shorts link" />
-        <button class="primary" id="go">Transcript banao →</button>
+               placeholder="https://www.youtube.com/watch?v=…" />
+        <button class="primary" id="go">Get Transcript →</button>
       </div>
     </div>
 
-    <div class="opts">
+    <div class="opts" id="yt-opts">
       <label class="toggle" for="ts">
         <input type="checkbox" id="ts" checked />
-        Timestamps dikhao
+        Show timestamps
       </label>
       <div class="lang">
         <span>Language</span>
@@ -222,8 +233,12 @@
       </div>
     </div>
 
+    <div class="tiktok-note" id="tt-note">
+      <b>How TikTok transcripts work:</b> TikTok does not provide public captions API. This tool extracts the auto-generated captions embedded in the video. Works best on videos with speech. Some videos may not have captions available.
+    </div>
+
     <div class="msg" id="err"></div>
-    <div class="loading" id="loading"><div class="spinner"></div> Transcript la rahe hain…</div>
+    <div class="loading" id="loading"><div class="spinner"></div> <span id="loading-text">Fetching transcript…</span></div>
   </div>
 
   <section class="result" id="result">
@@ -237,7 +252,7 @@
     <div class="transcript" id="out"></div>
   </section>
 
-  <footer>Captions enabled videos par hi kaam karta hai &middot; YouTube Transcript Tool v2</footer>
+  <footer>Works on videos with captions enabled &middot; Transcript Tool v2</footer>
 </div>
 
 <script>
@@ -247,11 +262,26 @@
   const outEl = $("out"), metaEl = $("meta"), copyEl = $("copy"), dlEl = $("download");
 
   let current = { segments: [], plain: "", videoId: "" };
+  let currentTab = "yt";
 
-  function showErr(m) {
-    errEl.textContent = m;
-    errEl.className = "msg err";
+  function switchTab(tab) {
+    currentTab = tab;
+    $("tab-yt").classList.toggle("active", tab === "yt");
+    $("tab-tt").classList.toggle("active", tab === "tt");
+    $("yt-opts").style.display = tab === "yt" ? "flex" : "none";
+    $("tt-note").classList.toggle("on", tab === "tt");
+    $("url-label").textContent = tab === "yt" ? "YouTube video link or ID" : "TikTok video link";
+    urlEl.placeholder = tab === "yt"
+      ? "https://www.youtube.com/watch?v=…"
+      : "https://www.tiktok.com/@user/video/…";
+    goEl.textContent = "Get Transcript →";
+    clearErr();
+    resEl.classList.remove("on");
+    urlEl.value = "";
+    urlEl.focus();
   }
+
+  function showErr(m) { errEl.textContent = m; errEl.className = "msg err"; }
   function clearErr() { errEl.className = "msg"; }
 
   function countWords(text) {
@@ -260,7 +290,7 @@
 
   function render() {
     const withTs = tsEl.checked;
-    if (withTs) {
+    if (withTs && current.segments.length) {
       outEl.classList.remove("plain");
       outEl.innerHTML = current.segments.map(s =>
         `<div class="line"><span class="t">${s.time}</span><span class="x">${escapeHtml(s.text)}</span></div>`
@@ -277,28 +307,35 @@
 
   async function fetchTranscript() {
     const url = urlEl.value.trim();
-    if (!url) { showErr("Pehle link paste karo."); return; }
+    if (!url) { showErr("Please paste a link first."); return; }
     clearErr();
     resEl.classList.remove("on");
     loadEl.classList.add("on");
+    $("loading-text").textContent = currentTab === "tt" ? "Extracting TikTok captions…" : "Fetching transcript…";
     goEl.disabled = true;
-    goEl.textContent = "La raha hoon…";
+    goEl.textContent = "Loading…";
 
     try {
-      const r = await fetch("/api/transcript", {
+      const endpoint = currentTab === "tt" ? "/api/tiktok" : "/api/transcript";
+      const body = currentTab === "tt"
+        ? { url }
+        : { url, lang: langEl.value || undefined };
+
+      const r = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, lang: langEl.value || undefined }),
+        body: JSON.stringify(body),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Kuch ghalat ho gaya.");
+      if (!r.ok) throw new Error(data.error || "Something went wrong.");
 
       current = data;
       const words = countWords(data.plain);
-      const dur = data.segments.length > 0
+      const dur = data.segments && data.segments.length > 0
         ? Math.round(data.segments[data.segments.length - 1].offset / 60) + " min"
         : "";
-      metaEl.innerHTML = `Video <b>${data.videoId}</b> · ${data.count} lines · ~${words.toLocaleString()} words${dur ? " · " + dur : ""}`;
+      const platform = currentTab === "tt" ? "TikTok" : "YouTube";
+      metaEl.innerHTML = `${platform} · <b>${data.videoId || "video"}</b> · ${data.count} lines · ~${words.toLocaleString()} words${dur ? " · " + dur : ""}`;
       render();
       resEl.classList.add("on");
     } catch (e) {
@@ -306,14 +343,15 @@
     } finally {
       loadEl.classList.remove("on");
       goEl.disabled = false;
-      goEl.textContent = "Transcript banao →";
+      goEl.textContent = "Get Transcript →";
     }
   }
 
   function getText() {
-    return tsEl.checked
-      ? current.segments.map(s => `[${s.time}] ${s.text}`).join("\n")
-      : current.plain;
+    if (tsEl.checked && current.segments && current.segments.length) {
+      return current.segments.map(s => `[${s.time}] ${s.text}`).join("\n");
+    }
+    return current.plain;
   }
 
   goEl.addEventListener("click", fetchTranscript);
@@ -325,24 +363,25 @@
       await navigator.clipboard.writeText(getText());
       copyEl.textContent = "✅ Copied!";
       setTimeout(() => copyEl.textContent = "📋 Copy", 1800);
-    } catch { showErr("Copy nahi ho saka."); }
+    } catch { showErr("Could not copy."); }
   });
 
   dlEl.addEventListener("click", () => {
     const blob = new Blob([getText()], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `transcript_${current.videoId || "yt"}.txt`;
+    a.download = `transcript_${current.videoId || "video"}.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
   });
 
-  // Paste from clipboard on focus if empty
   urlEl.addEventListener("focus", async () => {
     if (urlEl.value) return;
     try {
       const text = await navigator.clipboard.readText();
-      if (text && (text.includes("youtube.com") || text.includes("youtu.be"))) {
+      const isYT = text.includes("youtube.com") || text.includes("youtu.be");
+      const isTT = text.includes("tiktok.com");
+      if ((currentTab === "yt" && isYT) || (currentTab === "tt" && isTT)) {
         urlEl.value = text;
       }
     } catch (_) {}
