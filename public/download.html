@@ -4,7 +4,6 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>HD Download — Transcribe</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -13,7 +12,8 @@ body{background:var(--bg);color:var(--ink);font-family:"Inter",sans-serif;line-h
 nav{display:flex;justify-content:space-between;align-items:center;padding:16px clamp(16px,4vw,40px);border-bottom:1px solid var(--line)}
 .logo{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:20px;text-decoration:none;color:var(--ink)}
 .logo span{color:var(--accent)}
-.btn-sm{background:transparent;color:var(--muted);border:1px solid var(--line);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:"Inter";text-decoration:none}
+.nav-links{display:flex;gap:8px}
+.btn-sm{background:transparent;color:var(--muted);border:1px solid var(--line);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:"Inter";text-decoration:none;transition:all .15s}
 .btn-sm:hover{border-color:var(--accent);color:var(--ink)}
 .wrap{max-width:680px;margin:0 auto;padding:clamp(32px,6vw,64px) clamp(20px,4vw,48px)}
 .eyebrow{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
@@ -21,45 +21,47 @@ h1{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-
 h1 .em{color:var(--accent)}
 .sub{color:var(--muted);font-size:16px;margin-bottom:32px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:clamp(20px,3vw,32px)}
-.field{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+.ptabs{display:flex;gap:8px;margin-bottom:20px}
+.ptab{padding:9px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-family:"Inter";transition:all .15s}
+.ptab.active{background:var(--accent);color:#1a0d08;border-color:var(--accent)}
+.field{display:flex;flex-direction:column;gap:10px;margin-bottom:0}
 label{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
 .input-row{display:flex;gap:10px;flex-wrap:wrap}
-input[type="text"]{flex:1 1 240px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-size:16px;padding:14px 16px;border-radius:12px;font-family:"Inter";min-width:0}
+input[type="text"]{flex:1 1 240px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-size:16px;padding:14px 16px;border-radius:12px;font-family:"Inter";min-width:0;transition:border-color .15s}
 input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 input::placeholder{color:var(--faint)}
-button.primary{background:var(--accent);color:#1a0d08;border:none;font-family:"Bricolage Grotesque";font-weight:700;font-size:16px;padding:14px 22px;border-radius:12px;cursor:pointer;white-space:nowrap}
-button.primary:disabled{opacity:.55;cursor:not-allowed}
-.platform-tabs{display:flex;gap:8px;margin-bottom:20px}
-.ptab{padding:9px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-family:"Inter"}
-.ptab.active{background:var(--accent);color:#1a0d08;border-color:var(--accent)}
+.btn-get{background:var(--accent);color:#1a0d08;border:none;font-family:"Bricolage Grotesque";font-weight:700;font-size:16px;padding:14px 22px;border-radius:12px;cursor:pointer;white-space:nowrap;transition:filter .15s}
+.btn-get:hover{filter:brightness(1.08)}
+.btn-get:disabled{opacity:.55;cursor:not-allowed}
 .msg{margin-top:14px;font-size:14px;border-radius:12px;padding:12px 16px;display:none}
 .msg.err{display:block;background:#ff6a4d10;border:1px solid #ff6a4d44;color:#ffb9a8}
-.loading{display:none;align-items:center;gap:12px;color:var(--muted);font-size:14px;margin-top:16px}
-.loading.on{display:flex}
+.spinner-wrap{display:none;align-items:center;gap:12px;color:var(--muted);font-size:14px;margin-top:16px}
+.spinner-wrap.on{display:flex}
 .spinner{width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 .result{display:none;margin-top:24px}
 .result.on{display:block}
-.video-info{display:flex;gap:16px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:20px}
+.video-info{display:flex;gap:16px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:20px;flex-wrap:wrap}
 .thumb{width:120px;height:68px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--line)}
 .video-title{font-weight:600;font-size:15px;margin-bottom:6px;line-height:1.4}
 .video-meta{font-size:13px;color:var(--muted)}
-.quality-section h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:18px;margin-bottom:14px}
-.quality-list{display:flex;flex-direction:column;gap:10px}
-.q-item{display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.q-section h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:18px;margin-bottom:14px}
+.q-list{display:flex;flex-direction:column;gap:10px}
+.q-item{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;flex-wrap:wrap;gap:10px}
 .q-item:hover{border-color:var(--accent)}
 .q-label{font-weight:600;font-size:15px}
 .q-meta{font-size:13px;color:var(--muted);margin-top:2px}
-.q-btn{background:var(--accent);color:#1a0d08;border:none;padding:9px 18px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:"Bricolage Grotesque";text-decoration:none;white-space:nowrap}
+.q-btn{background:var(--accent);color:#1a0d08;border:none;padding:9px 18px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:"Bricolage Grotesque";text-decoration:none;white-space:nowrap;display:inline-block}
 .q-btn:hover{filter:brightness(1.08)}
 .note{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:13px;color:var(--muted);margin-top:20px}
 footer{margin-top:40px;color:var(--faint);font-size:13px;text-align:center;padding-bottom:40px}
+@media(max-width:480px){.input-row .btn-get{flex:1 1 100%}}
 </style>
 </head>
 <body>
 <nav>
   <a href="/" class="logo">Trans<span>cribe</span></a>
-  <div style="display:flex;gap:8px">
+  <div class="nav-links">
     <a href="/app.html" class="btn-sm">Transcript Tool</a>
     <a href="/login.html" class="btn-sm">Login</a>
   </div>
@@ -68,93 +70,104 @@ footer{margin-top:40px;color:var(--faint);font-size:13px;text-align:center;paddi
 <div class="wrap">
   <div class="eyebrow">Video Downloader</div>
   <h1>Download in <span class="em">HD.</span></h1>
-  <p class="sub">Paste any YouTube or TikTok link to get download options in multiple qualities.</p>
+  <p class="sub">Paste any YouTube or TikTok link to get download links in multiple qualities.</p>
 
   <div class="card">
-    <div class="platform-tabs">
-      <button class="ptab active" id="pt-yt" onclick="setPlatform('yt')">▶ YouTube</button>
-      <button class="ptab" id="pt-tt" onclick="setPlatform('tt')">♪ TikTok</button>
+    <div class="ptabs">
+      <button class="ptab active" id="pt-yt">YouTube</button>
+      <button class="ptab" id="pt-tt">TikTok</button>
     </div>
     <div class="field">
       <label id="dl-label">YouTube video link</label>
       <div class="input-row">
         <input type="text" id="dl-url" placeholder="https://www.youtube.com/watch?v=..."/>
-        <button class="primary" id="dl-go" onclick="fetchInfo()">Get Links</button>
+        <button class="btn-get" id="dl-go">Get Links</button>
       </div>
     </div>
     <div class="msg" id="dl-err"></div>
-    <div class="loading" id="dl-load"><div class="spinner"></div> Fetching video info...</div>
+    <div class="spinner-wrap" id="dl-spin"><div class="spinner"></div> Fetching video info...</div>
   </div>
 
   <div class="result" id="dl-result">
     <div class="video-info" id="video-info"></div>
-    <div class="quality-section">
+    <div class="q-section">
       <h3>Download Options</h3>
-      <div class="quality-list" id="quality-list"></div>
+      <div class="q-list" id="q-list"></div>
     </div>
-    <div class="note">⚠️ Downloads are for personal use only. Please respect copyright laws.</div>
+    <div class="note">Downloads are for personal use only. Please respect copyright laws.</div>
   </div>
 
-  <footer>© 2026 Transcribe · <a href="/" style="color:var(--faint)">Home</a></footer>
+  <footer>2026 Transcribe · <a href="/" style="color:var(--faint)">Home</a></footer>
 </div>
 
 <script>
 var platform = "yt";
+
+document.getElementById("pt-yt").addEventListener("click", function() { setPlatform("yt"); });
+document.getElementById("pt-tt").addEventListener("click", function() { setPlatform("tt"); });
+document.getElementById("dl-go").addEventListener("click", function() { fetchInfo(); });
+document.getElementById("dl-url").addEventListener("keydown", function(e) { if (e.key === "Enter") fetchInfo(); });
+
 function setPlatform(p) {
   platform = p;
-  document.getElementById("pt-yt").classList.toggle("active", p==="yt");
-  document.getElementById("pt-tt").classList.toggle("active", p==="tt");
-  document.getElementById("dl-label").textContent = p==="yt" ? "YouTube video link" : "TikTok video link";
-  document.getElementById("dl-url").placeholder = p==="yt" ? "https://www.youtube.com/watch?v=..." : "https://www.tiktok.com/@user/video/...";
+  document.getElementById("pt-yt").classList.toggle("active", p === "yt");
+  document.getElementById("pt-tt").classList.toggle("active", p === "tt");
+  document.getElementById("dl-label").textContent = p === "yt" ? "YouTube video link" : "TikTok video link";
+  document.getElementById("dl-url").placeholder = p === "yt" ? "https://www.youtube.com/watch?v=..." : "https://www.tiktok.com/@user/video/...";
   document.getElementById("dl-result").classList.remove("on");
   document.getElementById("dl-err").className = "msg";
+  document.getElementById("dl-url").value = "";
 }
 
 async function fetchInfo() {
   var url = document.getElementById("dl-url").value.trim();
-  if (!url) { showDlErr("Please paste a link."); return; }
+  if (!url) { showErr("Please paste a video link."); return; }
   var btn = document.getElementById("dl-go");
-  btn.disabled = true; btn.textContent = "Loading...";
-  document.getElementById("dl-load").classList.add("on");
+  btn.disabled = true;
+  btn.textContent = "Loading...";
+  document.getElementById("dl-spin").classList.add("on");
   document.getElementById("dl-err").className = "msg";
   document.getElementById("dl-result").classList.remove("on");
 
   try {
     var r = await fetch("/api/video-info", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: url, platform: platform })
     });
     var data = await r.json();
     if (!r.ok) throw new Error(data.error || "Could not fetch video info.");
-    showResult(data);
+    renderResult(data);
   } catch(e) {
-    showDlErr(e.message);
+    showErr(e.message);
   } finally {
-    document.getElementById("dl-load").classList.remove("on");
-    btn.disabled = false; btn.textContent = "Get Links";
+    document.getElementById("dl-spin").classList.remove("on");
+    btn.disabled = false;
+    btn.textContent = "Get Links";
   }
 }
 
-function showDlErr(m) {
+function showErr(m) {
   var el = document.getElementById("dl-err");
-  el.textContent = m; el.className = "msg err";
+  el.textContent = m;
+  el.className = "msg err";
 }
 
-function showResult(data) {
+function renderResult(data) {
   var infoEl = document.getElementById("video-info");
-  infoEl.innerHTML = (data.thumbnail ? '<img class="thumb" src="' + data.thumbnail + '" onerror="this.style.display='none'"/>' : "") +
-    '<div><div class="video-title">' + (data.title || "Video") + '</div><div class="video-meta">' + (data.duration || "") + (data.channel ? " · " + data.channel : "") + '</div></div>';
+  var thumbHtml = data.thumbnail ? '<img class="thumb" src="' + data.thumbnail + '" onerror="this.style.display='none'"/>' : "";
+  infoEl.innerHTML = thumbHtml + '<div><div class="video-title">' + (data.title || "Video") + '</div><div class="video-meta">' + (data.duration || "") + (data.channel ? " · " + data.channel : "") + '</div></div>';
 
-  var list = document.getElementById("quality-list");
-  list.innerHTML = (data.formats || []).map(function(f) {
-    return '<div class="q-item"><div><div class="q-label">' + f.quality + '</div><div class="q-meta">' + f.ext + (f.size ? " · " + f.size : "") + '</div></div><a class="q-btn" href="' + f.url + '" target="_blank" download>Download ⬇️</a></div>';
-  }).join("") || '<div style="color:var(--muted);font-size:14px">No download links found.</div>';
-
+  var list = document.getElementById("q-list");
+  if (!data.formats || data.formats.length === 0) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:12px">No download links found.</div>';
+  } else {
+    list.innerHTML = data.formats.map(function(f) {
+      return '<div class="q-item"><div><div class="q-label">' + f.quality + '</div><div class="q-meta">' + f.ext + (f.size ? " · " + f.size : "") + '</div></div><a class="q-btn" href="' + f.url + '" target="_blank">Download</a></div>';
+    }).join("");
+  }
   document.getElementById("dl-result").classList.add("on");
 }
-
-document.getElementById("dl-url").addEventListener("keydown", function(e) { if (e.key === "Enter") fetchInfo(); });
 </script>
 </body>
 </html>
