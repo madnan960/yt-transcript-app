@@ -425,11 +425,11 @@ app.get("/api/merge", async function(req, res) {
     else res.end();
   });
 
-  ff.on("close", function(codeNum) {
+  ff.on("close", function(codeNum, signal) {
     if (codeNum !== 0) {
-      console.log("ffmpeg exit " + codeNum + ": " + errLog.slice(0, 800));
+      console.log("ffmpeg exit " + codeNum + " signal " + signal + ": " + errLog.slice(0, 800));
       if (!started) {
-        return res.status(500).send("Merge failed (ffmpeg exit " + codeNum + "). Details: " + (errLog.slice(0, 400) || "no error output"));
+        return res.status(500).send("Merge failed (ffmpeg exit " + codeNum + ", signal " + signal + "). Details: " + (errLog.slice(0, 400) || "no error output"));
       }
     }
     res.end();
@@ -438,6 +438,61 @@ app.get("/api/merge", async function(req, res) {
   // Kill ffmpeg only if the client actually disconnected before the response finished
   res.on("close", function() {
     if (!res.writableEnded) ff.kill("SIGKILL");
+  });
+});
+
+// Diagnostic: test ffmpeg binary + synthetic merge in this environment
+app.get("/api/ffmpeg-test", function(req, res) {
+  var out = { ffmpegPath: ffmpegPath, node: process.version, mem: process.memoryUsage().rss };
+
+  var p1 = spawn(ffmpegPath, ["-version"]);
+  var v = "", e1 = "";
+  p1.stdout.on("data", function(d) { v += d.toString(); });
+  p1.stderr.on("data", function(d) { e1 += d.toString(); });
+  p1.on("error", function(e) { out.versionSpawnError = e.message; res.json(out); });
+  p1.on("close", function(c1, s1) {
+    out.version = (v.split("\n")[0] || "").slice(0, 100);
+    out.versionExit = c1;
+    out.versionSignal = s1;
+
+    var p2 = spawn(ffmpegPath, [
+      "-loglevel", "error",
+      "-f", "lavfi", "-i", "testsrc=duration=1:size=128x72:rate=10",
+      "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+      "-c:v", "libx264", "-c:a", "aac",
+      "-movflags", "frag_keyframe+empty_moov",
+      "-f", "mp4", "pipe:1"
+    ]);
+    var bytes = 0, e2 = "";
+    p2.stdout.on("data", function(d) { bytes += d.length; });
+    p2.stderr.on("data", function(d) { e2 += d.toString(); });
+    p2.on("error", function(e) { out.synthSpawnError = e.message; res.json(out); });
+    p2.on("close", function(c2, s2) {
+      out.synthExit = c2;
+      out.synthSignal = s2;
+      out.synthBytes = bytes;
+      out.synthErr = e2.slice(0, 300);
+
+      var testUrl = req.query.u;
+      if (!testUrl) return res.json(out);
+
+      var p3 = spawn(ffmpegPath, [
+        "-loglevel", "error",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "-i", testUrl,
+        "-t", "2",
+        "-f", "null", "-"
+      ]);
+      var e3 = "";
+      p3.stderr.on("data", function(d) { e3 += d.toString(); });
+      p3.on("error", function(e) { out.netSpawnError = e.message; res.json(out); });
+      p3.on("close", function(c3, s3) {
+        out.netExit = c3;
+        out.netSignal = s3;
+        out.netErr = e3.slice(0, 500);
+        res.json(out);
+      });
+    });
   });
 });
 
