@@ -394,7 +394,8 @@
     URL.revokeObjectURL(a.href);
   });
 
-  urlEl.addEventListener("focus", async () => {
+   on focus if empty
+  urlEl.addEventListener("focus", async () => {urlEl.addEventListener("focus", async () => {
     if (urlEl.value) return;
     try {
       const text = await navigator.clipboard.readText();
