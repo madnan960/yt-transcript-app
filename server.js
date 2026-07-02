@@ -243,7 +243,6 @@ app.post("/api/video-info", async function(req, res) {
   if (!url) return res.status(400).json({ error: "Please provide a video URL." });
 
   try {
-    // Extract YouTube video ID
     var videoId = null;
     var ytPatterns = [/(?:v=|\/)([0-9A-Za-z_-]{11})/, /(?:youtu\.be\/)([0-9A-Za-z_-]{11})/, /(?:shorts\/)([0-9A-Za-z_-]{11})/];
     for (var i = 0; i < ytPatterns.length; i++) {
@@ -254,23 +253,17 @@ app.post("/api/video-info", async function(req, res) {
 
     if (platform === "tt" || (!videoId && url.includes("tiktok.com"))) {
       return res.json({
-        title: "TikTok Video",
-        thumbnail: "",
-        channel: "TikTok",
-        formats: [
-          { quality: "HD Download", ext: "mp4", url: "https://snaptik.app/?url=" + encodeURIComponent(url), size: "" },
-          { quality: "SD Download", ext: "mp4", url: "https://tikmate.online/?url=" + encodeURIComponent(url), size: "" }
-        ]
+        title: "TikTok Video", thumbnail: "", channel: "TikTok",
+        formats: [{ quality: "HD Download", ext: "mp4", url: "https://snaptik.app/?url=" + encodeURIComponent(url), size: "" }]
       });
     }
 
     if (!videoId) return res.status(400).json({ error: "Invalid YouTube URL." });
 
-    // Use Youtube CDN Progress API
     var opts = {
       method: "GET",
       hostname: "youtube-cdn-progress.p.rapidapi.com",
-      path: "/mp4?videoId=" + videoId,
+      path: "/mp4?id=" + videoId,
       headers: {
         "x-rapidapi-key": RAPID_KEY,
         "x-rapidapi-host": "youtube-cdn-progress.p.rapidapi.com"
@@ -281,65 +274,41 @@ app.post("/api/video-info", async function(req, res) {
 
     if (apiRes.status === 200) {
       var data = JSON.parse(apiRes.body);
-      var formats = [];
 
-      // Extract download links from response
-      var qualities = ["1080p", "720p", "480p", "360p", "240p", "144p"];
-      qualities.forEach(function(q) {
-        var key = q.replace("p", "");
-        if (data[key] || data["url_" + key] || data[q]) {
-          var dlUrl = data[key] || data["url_" + key] || data[q];
-          if (typeof dlUrl === "string") {
-            formats.push({ quality: q + " HD", ext: "mp4", url: dlUrl, size: "" });
-          }
+      if (data.error === false && data.medias && Array.isArray(data.medias)) {
+        var formats = data.medias.map(function(m) {
+          return {
+            quality: m.label || m.quality,
+            ext: m.extension || "mp4",
+            url: m.url,
+            size: m.size || "",
+            type: m.type || "video"
+          };
+        });
+
+        var thumb = "";
+        if (data.thumbnail && data.thumbnail.thumbnails && data.thumbnail.thumbnails.length > 0) {
+          var thumbs = data.thumbnail.thumbnails;
+          thumb = thumbs[thumbs.length - 1].url || thumbs[0].url;
         }
-      });
 
-      // Try links array
-      if (data.links && Array.isArray(data.links)) {
-        data.links.forEach(function(l) {
-          if (l.url && l.quality) {
-            formats.push({ quality: l.quality, ext: l.ext || "mp4", url: l.url, size: l.size || "" });
-          }
-        });
-      }
+        var duration = "";
+        if (data.lengthSeconds) {
+          var secs = parseInt(data.lengthSeconds);
+          duration = Math.floor(secs/60) + ":" + (secs%60).toString().padStart(2,"0");
+        }
 
-      // Try formats array
-      if (data.formats && Array.isArray(data.formats)) {
-        data.formats.forEach(function(f) {
-          if (f.url) {
-            formats.push({ quality: f.quality || f.resolution || "HD", ext: f.ext || "mp4", url: f.url, size: f.size || "" });
-          }
-        });
-      }
-
-      // Try direct url fields
-      if (data.url) formats.push({ quality: "Best Quality", ext: "mp4", url: data.url, size: "" });
-      if (data.hd) formats.push({ quality: "1080p HD", ext: "mp4", url: data.hd, size: "" });
-      if (data.sd) formats.push({ quality: "720p SD", ext: "mp4", url: data.sd, size: "" });
-
-      if (formats.length > 0) {
         return res.json({
           title: data.title || "YouTube Video",
-          thumbnail: "https://img.youtube.com/vi/" + videoId + "/mqdefault.jpg",
+          thumbnail: thumb || "https://img.youtube.com/vi/" + videoId + "/mqdefault.jpg",
           channel: data.author || "YouTube",
-          duration: data.lengthSeconds ? Math.floor(data.lengthSeconds/60) + ":" + (data.lengthSeconds%60).toString().padStart(2,"0") : "",
-          formats: formats.slice(0, 6),
-          raw: JSON.stringify(data).substring(0, 500)
+          duration: duration,
+          formats: formats
         });
       }
-
-      // Return raw data for debugging
-      return res.json({
-        title: data.title || "YouTube Video",
-        thumbnail: "https://img.youtube.com/vi/" + videoId + "/mqdefault.jpg",
-        channel: "YouTube",
-        formats: [],
-        debug: JSON.stringify(data).substring(0, 1000)
-      });
     }
 
-    return res.status(500).json({ error: "API returned status " + apiRes.status + ": " + apiRes.body.substring(0, 200) });
+    return res.status(500).json({ error: "Could not fetch download links. Status: " + apiRes.status });
 
   } catch(err) {
     return res.status(500).json({ error: "Error: " + (err.message || "Unknown") });
