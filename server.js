@@ -348,30 +348,49 @@ app.get("/api/merge", function(req, res) {
     }
   } catch (e) { return res.status(400).send("Invalid URL"); }
 
-  res.setHeader("Content-Type", "video/mp4");
-  res.setHeader("Content-Disposition", 'attachment; filename="' + title + '.mp4"');
-
   var ff = spawn(ffmpegPath, [
     "-loglevel", "error",
     "-i", v,
     "-i", a,
-    "-c", "copy",
-    "-movflags", "frag_keyframe+empty_moov",
+    "-map", "0:v:0",
+    "-map", "1:a:0",
+    "-c:v", "copy",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-movflags", "frag_keyframe+empty_moov+default_base_moof",
     "-f", "mp4",
     "pipe:1"
   ]);
 
-  ff.stdout.pipe(res);
+  var started = false;
   var errLog = "";
-  ff.stderr.on("data", function(d) { errLog += d.toString().slice(0, 500); });
-  ff.on("error", function() {
-    if (!res.headersSent) res.status(500).send("Merge failed to start");
+
+  ff.stdout.once("data", function(first) {
+    started = true;
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Disposition", 'attachment; filename="' + title + '.mp4"');
+    res.write(first);
+    ff.stdout.pipe(res);
+  });
+
+  ff.stderr.on("data", function(d) { if (errLog.length < 2000) errLog += d.toString(); });
+
+  ff.on("error", function(e) {
+    console.log("ffmpeg spawn error: " + e.message);
+    if (!started) res.status(500).send("Merge failed to start: " + e.message);
     else res.end();
   });
+
   ff.on("close", function(codeNum) {
-    if (codeNum !== 0) console.log("ffmpeg exit " + codeNum + ": " + errLog.slice(0, 300));
+    if (codeNum !== 0) {
+      console.log("ffmpeg exit " + codeNum + ": " + errLog.slice(0, 500));
+      if (!started) {
+        return res.status(500).send("Merge failed. Details: " + (errLog.slice(0, 300) || "unknown ffmpeg error"));
+      }
+    }
     res.end();
   });
+
   req.on("close", function() { ff.kill("SIGKILL"); });
 });
 
