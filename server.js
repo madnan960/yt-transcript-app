@@ -5,7 +5,8 @@ const https = require("https");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const RAPID_API_KEY = process.env.RAPID_API_KEY || "2b8d22e53emsh91b83d42b01f4dap1e3b20jsn84a2034a2ac8";
+const RAPID_KEY = "2b8d22e53emsh91b83d42b01f4dap1e3b20jsn84a2034a2ac8";
+const RAPID_HOST = "youtube-captions-transcript-subtitles-video-combiner.p.rapidapi.com";
 
 app.use(cors());
 app.use(express.json());
@@ -36,25 +37,25 @@ function extractVideoId(input) {
   return null;
 }
 
-function httpsGet(url, headers) {
+function httpsGet(options) {
   return new Promise(function(resolve, reject) {
-    https.get(url, { headers: headers || {} }, function(res) {
+    const req = https.request(options, function(res) {
       let data = "";
       res.on("data", function(c) { data += c; });
       res.on("end", function() { resolve({ status: res.statusCode, body: data }); });
-    }).on("error", reject);
+    });
+    req.on("error", reject);
+    req.end();
   });
 }
 
-// Parse VTT subtitle format
 function parseVTT(vtt) {
   const segments = [];
   const lines = vtt.split("\n");
   let i = 0;
   while (i < lines.length) {
     const line = lines[i].trim();
-    // Time line: 00:00:01.000 --> 00:00:04.000
-    const timeMatch = line.match(/(\d{2}:\d{2}:\d{2}[\.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[\.,]\d{3})/);
+    const timeMatch = line.match(/(\d{2}:\d{2}:\d{2}[\.,]\d{3})\s*-->\s*/);
     if (timeMatch) {
       const startStr = timeMatch[1].replace(",", ".");
       const parts = startStr.split(":");
@@ -62,11 +63,11 @@ function parseVTT(vtt) {
       i++;
       let text = "";
       while (i < lines.length && lines[i].trim() !== "") {
-        text += (text ? " " : "") + lines[i].trim().replace(/<[^>]+>/g, "");
+        const t = lines[i].trim().replace(/<[^>]+>/g, "").trim();
+        if (t) text += (text ? " " : "") + t;
         i++;
       }
-      text = text.trim();
-      if (text && !text.startsWith("WEBVTT") && !text.startsWith("NOTE")) {
+      if (text && text.length > 0) {
         segments.push({ text: text, offset: seconds, time: formatTime(seconds) });
       }
     }
@@ -75,33 +76,74 @@ function parseVTT(vtt) {
   return segments;
 }
 
-async function fetchViaRapidAPI(videoId, lang) {
+async function fetchTranscript(videoId, lang) {
   const language = (lang && lang !== "auto") ? lang : "en";
-  const url = "https://youtube-captions-transcript-subtitles-video-combiner.p.rapidapi.com/download-webvtt/" + videoId + "XI?language=" + language + "&response_mode=default";
   
-  const headers = {
-    "x-rapidapi-key": RAPID_API_KEY,
-    "x-rapidapi-host": "youtube-captions-transcript-subtitles-video-combiner.p.rapidapi.com",
-    "Content-Type": "application/json"
+  // Try different language options
+  const langs = [language, "en", "en-US"];
+  
+  for (let i = 0; i < langs.length; i++) {
+    const l = langs[i];
+    const options = {
+      method: "GET",
+      hostname: RAPID_HOST,
+      path: "/download-webvtt/" + videoId + "?language=" + l + "&response_mode=default",
+      headers: {
+        "x-rapidapi-key": RAPID_KEY,
+        "x-rapidapi-host": RAPID_HOST,
+        "Content-Type": "application/json"
+      }
+    };
+    
+    const res = await httpsGet(options);
+    
+    if (res.status === 200 && res.body.includes("-->")) {
+      const segments = parseVTT(res.body);
+      if (segments.length > 0) return segments;
+    }
+  }
+  
+  // Try get-available-languages endpoint to see what's available
+  const langOptions = {
+    method: "GET",
+    hostname: RAPID_HOST,
+    path: "/get-available-languages/" + videoId,
+    headers: {
+      "x-rapidapi-key": RAPID_KEY,
+      "x-rapidapi-host": RAPID_HOST,
+      "Content-Type": "application/json"
+    }
   };
-
-  const res = await httpsGet(url, headers);
   
-  if (res.status === 404) {
-    // Try without language (auto)
-    const url2 = "https://youtube-captions-transcript-subtitles-video-combiner.p.rapidapi.com/download-webvtt/" + videoId + "XI?language=en&response_mode=default";
-    const res2 = await httpsGet(url2, headers);
-    if (res2.status !== 200) throw new Error("No captions found for this video.");
-    return parseVTT(res2.body);
+  const langRes = await httpsGet(langOptions);
+  
+  if (langRes.status === 200) {
+    let availLangs;
+    try { availLangs = JSON.parse(langRes.body); } catch(e) { availLangs = null; }
+    
+    if (availLangs && Array.isArray(availLangs) && availLangs.length > 0) {
+      // Try first available language
+      const firstLang = availLangs[0].code || availLangs[0].languageCode || availLangs[0];
+      const retryOptions = {
+        method: "GET",
+        hostname: RAPID_HOST,
+        path: "/download-webvtt/" + videoId + "?language=" + firstLang + "&response_mode=default",
+        headers: {
+          "x-rapidapi-key": RAPID_KEY,
+          "x-rapidapi-host": RAPID_HOST,
+          "Content-Type": "application/json"
+        }
+      };
+      const retryRes = await httpsGet(retryOptions);
+      if (retryRes.status === 200) {
+        const segments = parseVTT(retryRes.body);
+        if (segments.length > 0) return segments;
+      }
+    }
+    throw new Error("No captions available. Languages response: " + langRes.body.substring(0, 100));
   }
   
-  if (res.status !== 200) {
-    throw new Error("API error (status " + res.status + "): " + res.body.substring(0, 100));
-  }
-
-  const segments = parseVTT(res.body);
-  if (segments.length === 0) throw new Error("No caption content found in the response.");
-  return segments;
+  throw new Error("No captions found for this video. Make sure the video has subtitles/captions enabled.");
 }
 
 app.post("/api/transcript", async function(req, res) {
@@ -109,12 +151,10 @@ app.post("/api/transcript", async function(req, res) {
   const lang = req.body && req.body.lang;
   const videoId = extractVideoId(url);
 
-  if (!videoId) {
-    return res.status(400).json({ error: "Please enter a valid YouTube link or video ID." });
-  }
+  if (!videoId) return res.status(400).json({ error: "Please enter a valid YouTube link or video ID." });
 
   try {
-    const segments = await fetchViaRapidAPI(videoId, lang);
+    const segments = await fetchTranscript(videoId, lang);
     const plain = segments.map(function(s) { return s.text; }).join(" ");
     return res.json({ videoId: videoId, count: segments.length, segments: segments, plain: plain });
   } catch(err) {
