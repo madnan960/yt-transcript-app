@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const https = require("https");
+const { spawn } = require("child_process");
+const ffmpegPath = require("ffmpeg-static");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -292,9 +294,22 @@ app.post("/api/video-info", async function(req, res) {
           return { quality: q + (suffix || ""), ext: extStr, url: m.url, size: m.formattedSize || "" };
         }
 
+        var safeTitle = String(data.title || "video").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "video";
+
+        function mergeUrl(m) {
+          return "/api/merge?v=" + encodeURIComponent(m.url) + "&a=" + encodeURIComponent(m.audioUrl) + "&title=" + encodeURIComponent(safeTitle);
+        }
+
         var formats = []
           .concat(vidsProg.map(function(m) { return mkFormat(m, ""); }))
-          .concat(vidsOnly.map(function(m) { return mkFormat(m, " (no audio)"); }))
+          .concat(vidsOnly.map(function(m) {
+            if (m.audioUrl) {
+              var f = mkFormat(m, "");
+              f.url = mergeUrl(m);
+              return f;
+            }
+            return mkFormat(m, " (no audio)");
+          }))
           .concat(audios.map(function(m) { return mkFormat({ quality: "Audio (" + (m.quality || "") + ")", extension: m.extension, formattedSize: m.formattedSize, url: m.url }, ""); }));
 
         return res.json({
@@ -318,6 +333,46 @@ app.post("/api/video-info", async function(req, res) {
   } catch(err) {
     return res.status(500).json({ error: "Error: " + (err.message || "Unknown") });
   }
+});
+
+// Merge video + audio streams into a single mp4 via ffmpeg (streaming)
+app.get("/api/merge", function(req, res) {
+  var v = req.query.v, a = req.query.a;
+  var title = String(req.query.title || "video").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "video";
+  if (!v || !a) return res.status(400).send("Missing video/audio URL");
+
+  try {
+    var vh = new URL(v).hostname, ah = new URL(a).hostname;
+    if (!/\.googlevideo\.com$/.test(vh) || !/\.googlevideo\.com$/.test(ah)) {
+      return res.status(400).send("Invalid source host");
+    }
+  } catch (e) { return res.status(400).send("Invalid URL"); }
+
+  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Disposition", 'attachment; filename="' + title + '.mp4"');
+
+  var ff = spawn(ffmpegPath, [
+    "-loglevel", "error",
+    "-i", v,
+    "-i", a,
+    "-c", "copy",
+    "-movflags", "frag_keyframe+empty_moov",
+    "-f", "mp4",
+    "pipe:1"
+  ]);
+
+  ff.stdout.pipe(res);
+  var errLog = "";
+  ff.stderr.on("data", function(d) { errLog += d.toString().slice(0, 500); });
+  ff.on("error", function() {
+    if (!res.headersSent) res.status(500).send("Merge failed to start");
+    else res.end();
+  });
+  ff.on("close", function(codeNum) {
+    if (codeNum !== 0) console.log("ffmpeg exit " + codeNum + ": " + errLog.slice(0, 300));
+    res.end();
+  });
+  req.on("close", function() { ff.kill("SIGKILL"); });
 });
 
 app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
