@@ -5,8 +5,9 @@ const https = require("https");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const RAPID_KEY = "2b8d22e53emsh91b83d42b01f4dap1e3b20jsn84a2034a2ac8";
+const RAPID_KEY = process.env.RAPID_KEY || "RAPID_KEY_HERE";
 const RAPID_HOST = "youtube-captions-transcript-subtitles-video-combiner.p.rapidapi.com";
+const GROQ_KEY = process.env.GROQ_API_KEY || "GROQ_KEY_HERE";
 
 app.use(cors());
 app.use(express.json());
@@ -37,7 +38,13 @@ function extractVideoId(input) {
   return null;
 }
 
-function httpsGet(options) {
+function decodeEntities(str) {
+  return str
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#x27;/g, "'").replace(/&apos;/g, "'");
+}
+
+function httpsRequest(options, body) {
   return new Promise(function(resolve, reject) {
     const req = https.request(options, function(res) {
       let data = "";
@@ -45,19 +52,9 @@ function httpsGet(options) {
       res.on("end", function() { resolve({ status: res.statusCode, body: data }); });
     });
     req.on("error", reject);
+    if (body) req.write(body);
     req.end();
   });
-}
-
-function decodeEntities(str) {
-  return str
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&apos;/g, "'");
 }
 
 function parseVTT(vtt) {
@@ -87,85 +84,91 @@ function parseVTT(vtt) {
   return segments;
 }
 
-async function fetchTranscript(videoId, lang) {
+async function fetchYouTubeTranscript(videoId, lang) {
   const language = (lang && lang !== "auto") ? lang : "en";
-  
-  // Try different language options
   const langs = [language, "en", "en-US"];
-  
   for (let i = 0; i < langs.length; i++) {
-    const l = langs[i];
     const options = {
       method: "GET",
       hostname: RAPID_HOST,
-      path: "/download-webvtt/" + videoId + "?language=" + l + "&response_mode=default",
-      headers: {
-        "x-rapidapi-key": RAPID_KEY,
-        "x-rapidapi-host": RAPID_HOST,
-        "Content-Type": "application/json"
-      }
+      path: "/download-webvtt/" + videoId + "?language=" + langs[i] + "&response_mode=default",
+      headers: { "x-rapidapi-key": RAPID_KEY, "x-rapidapi-host": RAPID_HOST }
     };
-    
-    const res = await httpsGet(options);
-    
+    const res = await httpsRequest(options);
     if (res.status === 200 && res.body.includes("-->")) {
       const segments = parseVTT(res.body);
       if (segments.length > 0) return segments;
     }
   }
-  
-  // Try get-available-languages endpoint to see what's available
   const langOptions = {
     method: "GET",
     hostname: RAPID_HOST,
     path: "/get-available-languages/" + videoId,
+    headers: { "x-rapidapi-key": RAPID_KEY, "x-rapidapi-host": RAPID_HOST }
+  };
+  const langRes = await httpsRequest(langOptions);
+  if (langRes.status === 200) {
+    try {
+      const availLangs = JSON.parse(langRes.body);
+      if (Array.isArray(availLangs) && availLangs.length > 0) {
+        const firstLang = availLangs[0].code || availLangs[0].languageCode || availLangs[0];
+        const retryOpts = {
+          method: "GET",
+          hostname: RAPID_HOST,
+          path: "/download-webvtt/" + videoId + "?language=" + firstLang + "&response_mode=default",
+          headers: { "x-rapidapi-key": RAPID_KEY, "x-rapidapi-host": RAPID_HOST }
+        };
+        const retryRes = await httpsRequest(retryOpts);
+        if (retryRes.status === 200) {
+          const segments = parseVTT(retryRes.body);
+          if (segments.length > 0) return segments;
+        }
+      }
+    } catch(e) {}
+  }
+  throw new Error("No captions found. Make sure the video has subtitles/captions enabled.");
+}
+
+async function fetchTikTokTranscript(url) {
+  const options = {
+    method: "GET",
+    hostname: "tiktok-video-transcript.p.rapidapi.com",
+    path: "/transcribe?url=" + encodeURIComponent(url) + "&language=en-US&timestamps=true",
     headers: {
       "x-rapidapi-key": RAPID_KEY,
-      "x-rapidapi-host": RAPID_HOST,
-      "Content-Type": "application/json"
+      "x-rapidapi-host": "tiktok-video-transcript.p.rapidapi.com"
     }
   };
-  
-  const langRes = await httpsGet(langOptions);
-  
-  if (langRes.status === 200) {
-    let availLangs;
-    try { availLangs = JSON.parse(langRes.body); } catch(e) { availLangs = null; }
-    
-    if (availLangs && Array.isArray(availLangs) && availLangs.length > 0) {
-      // Try first available language
-      const firstLang = availLangs[0].code || availLangs[0].languageCode || availLangs[0];
-      const retryOptions = {
-        method: "GET",
-        hostname: RAPID_HOST,
-        path: "/download-webvtt/" + videoId + "?language=" + firstLang + "&response_mode=default",
-        headers: {
-          "x-rapidapi-key": RAPID_KEY,
-          "x-rapidapi-host": RAPID_HOST,
-          "Content-Type": "application/json"
-        }
-      };
-      const retryRes = await httpsGet(retryOptions);
-      if (retryRes.status === 200) {
-        const segments = parseVTT(retryRes.body);
-        if (segments.length > 0) return segments;
-      }
+  const result = await httpsRequest(options);
+  if (result.status !== 200) throw new Error("Could not fetch TikTok transcript.");
+  const data = JSON.parse(result.body);
+  if (!data.success || !data.text) throw new Error("No transcript found for this TikTok video.");
+  const segments = [];
+  if (data.words && Array.isArray(data.words) && data.words.length > 0) {
+    const chunkSize = 10;
+    for (let i = 0; i < data.words.length; i += chunkSize) {
+      const chunk = data.words.slice(i, i + chunkSize);
+      const text = chunk.map(function(w) { return w.text || w.word || ""; }).join(" ").trim();
+      const offset = chunk[0].start !== undefined ? chunk[0].start : 0;
+      if (text) segments.push({ text: text, offset: offset, time: formatTime(offset) });
     }
-    throw new Error("No captions available. Languages response: " + langRes.body.substring(0, 100));
   }
-  
-  throw new Error("No captions found for this video. Make sure the video has subtitles/captions enabled.");
+  if (segments.length === 0) {
+    const words = data.text.split(" ");
+    for (let i = 0; i < words.length; i += 15) {
+      segments.push({ text: words.slice(i, i + 15).join(" "), offset: 0, time: "00:00" });
+    }
+  }
+  return { segments: segments, plain: data.text };
 }
 
 app.post("/api/transcript", async function(req, res) {
   const url = req.body && req.body.url;
   const lang = req.body && req.body.lang;
   const videoId = extractVideoId(url);
-
   if (!videoId) return res.status(400).json({ error: "Please enter a valid YouTube link or video ID." });
-
   try {
-    const segments = await fetchTranscript(videoId, lang);
+    const segments = await fetchYouTubeTranscript(videoId, lang);
     const plain = segments.map(function(s) { return s.text; }).join(" ");
     return res.json({ videoId: videoId, count: segments.length, segments: segments, plain: plain });
   } catch(err) {
@@ -175,180 +178,64 @@ app.post("/api/transcript", async function(req, res) {
 
 app.post("/api/tiktok", async function(req, res) {
   const url = req.body && req.body.url;
-  if (!url || !url.includes("tiktok.com")) {
-    return res.status(400).json({ error: "Please enter a valid TikTok video link." });
-  }
-
+  if (!url || !url.includes("tiktok.com")) return res.status(400).json({ error: "Please enter a valid TikTok video link." });
   try {
-    const apiUrl = "https://tiktok-video-transcript.p.rapidapi.com/transcribe?url=" + encodeURIComponent(url) + "&language=en-US&timestamps=true";
-    const options = {
-      method: "GET",
-      hostname: "tiktok-video-transcript.p.rapidapi.com",
-      path: "/transcribe?url=" + encodeURIComponent(url) + "&language=en-US&timestamps=true",
-      headers: {
-        "x-rapidapi-key": RAPID_KEY,
-        "x-rapidapi-host": "tiktok-video-transcript.p.rapidapi.com",
-        "Content-Type": "application/json"
-      }
-    };
-
-    const result = await httpsGet(options);
-    
-    if (result.status !== 200) {
-      return res.status(404).json({ error: "Could not fetch TikTok transcript (status " + result.status + ")." });
-    }
-
-    let data;
-    try { data = JSON.parse(result.body); } catch(e) {
-      return res.status(500).json({ error: "Could not parse TikTok response." });
-    }
-
-    if (!data.success || !data.text) {
-      return res.status(404).json({ error: "No transcript found for this TikTok video." });
-    }
-
-    // Parse timestamps - group words into sentence chunks
-    const segments = [];
-    if (data.words && Array.isArray(data.words) && data.words.length > 0) {
-      // Group every ~10 words into a segment
-      const chunkSize = 10;
-      let i = 0;
-      while (i < data.words.length) {
-        const chunk = data.words.slice(i, i + chunkSize);
-        const text = chunk.map(function(w) { return w.text || w.word || ""; }).join(" ").trim();
-        const offset = chunk[0].start !== undefined ? chunk[0].start : (chunk[0].startTime || 0);
-        if (text) {
-          segments.push({ text: text, offset: offset, time: formatTime(offset) });
-        }
-        i += chunkSize;
-      }
-    }
-
-    if (segments.length === 0) {
-      // Split plain text into chunks of ~100 chars
-      const words = data.text.split(" ");
-      const chunkSize = 15;
-      for (let i = 0; i < words.length; i += chunkSize) {
-        const chunk = words.slice(i, i + chunkSize).join(" ");
-        segments.push({ text: chunk, offset: 0, time: "00:00" });
-      }
-      if (segments.length === 0) {
-        segments.push({ text: data.text, offset: 0, time: "00:00" });
-      }
-    }
-
-    const plain = data.text;
-    const videoId = url.match(/video\/(\d+)/);
-    return res.json({ 
-      videoId: videoId ? videoId[1] : "tiktok", 
-      count: segments.length, 
-      segments: segments, 
-      plain: plain 
-    });
-
+    const data = await fetchTikTokTranscript(url);
+    const videoId = (url.match(/video\/(\d+)/) || [])[1] || "tiktok";
+    return res.json({ videoId: videoId, count: data.segments.length, segments: data.segments, plain: data.plain });
   } catch(err) {
-    return res.status(500).json({ error: "TikTok transcript error: " + (err.message || "Unknown error") });
+    return res.status(500).json({ error: err.message || "TikTok transcript error." });
   }
 });
 
-app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
-app.get("/", function(req, res) { res.sendFile(path.join(__dirname, "public", "index.html")); });
-app.listen(PORT, function() { console.log("Server running on port " + PORT); });
-
-
-
-
-
-// AI Clip Finder endpoint
 app.post("/api/find-clips", async function(req, res) {
   const segments = req.body && req.body.segments;
-  const plain = req.body && req.body.plain;
   const duration = req.body && req.body.duration;
+  if (!segments || segments.length === 0) return res.status(400).json({ error: "No transcript provided." });
 
-  if (!segments || !plain) {
-    return res.status(400).json({ error: "No transcript provided." });
-  }
-
-  // Determine clip count based on video duration (in minutes)
   const durationMins = duration ? duration / 60 : 0;
   const clipCount = durationMins >= 30 ? "7-8" : durationMins >= 15 ? "4-5" : "3-4";
 
-  // Build transcript with timestamps for Claude
-  const transcriptWithTime = segments.map(function(s) {
+  const transcriptText = segments.map(function(s) {
     return "[" + s.time + "] " + s.text;
-  }).join("\n");
+  }).join("\n").substring(0, 6000);
 
-  const prompt = `You are a viral content expert. Analyze this video transcript and find the ${clipCount} best clips that would go viral on YouTube Shorts or TikTok.
+  const userPrompt = "You are a viral content expert. Analyze this video transcript and find the " + clipCount + " best clips that would go viral on YouTube Shorts or TikTok.\n\nRULES:\n- Each clip must be exactly 40-45 seconds long\n- Pick the most engaging, surprising, funny, or valuable moments\n- Clips must make sense on their own\n- Return ONLY valid JSON\n\nTRANSCRIPT:\n" + transcriptText + "\n\nReturn this JSON format:\n{\"clips\":[{\"clip_number\":1,\"start_time\":\"00:00\",\"end_time\":\"00:42\",\"title\":\"Viral title\",\"hook\":\"Opening line\",\"tags\":[\"tag1\",\"tag2\",\"tag3\",\"tag4\",\"tag5\",\"tag6\",\"tag7\",\"tag8\"],\"why_viral\":\"Why this works\"}]}";
 
-RULES:
-- Each clip must be exactly 40-45 seconds long (find start and end timestamps)
-- Pick the most engaging, surprising, funny, or valuable moments
-- Clips must make sense on their own without context
-- Return ONLY valid JSON, no other text
-
-TRANSCRIPT:
-${transcriptWithTime.substring(0, 8000)}
-
-Return this exact JSON format:
-{
-  "clips": [
-    {
-      "clip_number": 1,
-      "start_time": "00:00",
-      "end_time": "00:42",
-      "start_seconds": 0,
-      "end_seconds": 42,
-      "title": "Catchy viral title here",
-      "hook": "First sentence that grabs attention",
-      "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"],
-      "why_viral": "One sentence why this clip will go viral"
-    }
-  ]
-}`;
+  const body = JSON.stringify({
+    model: "llama-3.3-70b-versatile",
+    max_tokens: 2000,
+    response_format: { type: "json_object" },
+    messages: [{ role: "user", content: userPrompt }]
+  });
 
   try {
-    const https = require("https");
-    const body = JSON.stringify({
-      model: "claude-haiku-4-5",
-      max_tokens: 2000,
-      messages: [{ role: "user", content: prompt }]
-    });
+    const options = {
+      method: "POST",
+      hostname: "api.groq.com",
+      path: "/openai/v1/chat/completions",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + GROQ_KEY,
+        "Content-Length": Buffer.byteLength(body)
+      }
+    };
 
-    const data = await new Promise(function(resolve, reject) {
-      const reqOptions = {
-        hostname: "api.anthropic.com",
-        path: "/v1/messages",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": process.env.ANTHROPIC_API_KEY || "",
-          "anthropic-version": "2023-06-01",
-          "Content-Length": Buffer.byteLength(body)
-        }
-      };
+    const result = await httpsRequest(options, body);
+    const data = JSON.parse(result.body);
 
-      const r = https.request(reqOptions, function(response) {
-        let d = "";
-        response.on("data", function(c) { d += c; });
-        response.on("end", function() { resolve(JSON.parse(d)); });
-      });
-      r.on("error", reject);
-      r.write(body);
-      r.end();
-    });
-
-    if (!data.content || !data.content[0]) {
+    if (!data.choices || !data.choices[0]) {
       return res.status(500).json({ error: "AI response empty." });
     }
 
-    const text = data.content[0].text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return res.status(500).json({ error: "Could not parse AI response." });
-
-    const clips = JSON.parse(jsonMatch[0]);
+    const clips = JSON.parse(data.choices[0].message.content);
     return res.json(clips);
 
   } catch(err) {
     return res.status(500).json({ error: "AI error: " + (err.message || "Unknown") });
   }
 });
+
+app.get("/api/health", function(req, res) { res.json({ status: "ok" }); });
+app.get("/", function(req, res) { res.sendFile(path.join(__dirname, "public", "index.html")); });
+app.listen(PORT, function() { console.log("Server running on port " + PORT); });
