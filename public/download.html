@@ -164,7 +164,7 @@ footer{margin-top:40px;color:var(--faint);font-size:13px;text-align:center;paddi
   }
 
   function showResult(d) {
-    var th = d.thumbnail ? '<img class="vt" src="' + d.thumbnail + '" onerror="this.style.display='none'"/>' : '<div class="vt"></div>';
+    var th = d.thumbnail ? '<img class="vt" src="' + d.thumbnail + '" onerror="this.style.display=\'none\'"/>' : '<div class="vt"></div>';
     infoEl.innerHTML = th + '<div><div class="vtitle">' + (d.title || "Video") + '</div><div class="vmeta">' + (d.duration || "") + (d.channel ? " &middot; " + d.channel : "") + '</div></div>';
 
     if (!d.formats || d.formats.length === 0) {
